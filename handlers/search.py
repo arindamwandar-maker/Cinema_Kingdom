@@ -25,8 +25,25 @@ class SearchHandler:
 
         if text.startswith("/"):
             return
-        if text in {"🎬 Search Movie", "🎥 Request Movie", "📢 Join Channel", "👥 Join Group", "ℹ️ Help"}:
-            return
+        if text == "🎬 Search Movie":
+    await message.reply_text("🎬 Movie name লিখুন / type করুন।\nExample: Avengers")
+    return
+
+if text == "🎥 Request Movie":
+    await message.reply_text("🎥 Request করতে লিখুন:\n/request Movie Name")
+    return
+
+if text == "📢 Join Channel":
+    await message.reply_text(f"https://t.me/{self.config.CHANNEL_USERNAME.replace('@','')}")
+    return
+
+if text == "👥 Join Group":
+    await message.reply_text(f"https://t.me/{self.config.GROUP_USERNAME.replace('@','')}")
+    return
+
+if text == "ℹ️ Help":
+    await message.reply_text(self.config.HELP_MSG)
+    return
 
         if update.effective_chat and update.effective_chat.type in ("group", "supergroup"):
             if not self.is_admin(user.id):
