@@ -28,7 +28,7 @@ class SearchHandler:
         if chat.type == "private":
             sent = await message.reply_text(
             "ߔ <b>Private Search Disabled</b>\n\n"
-            "Movie search করতে Cinema Kingdom Group ব্যবহার করুন.\n\n"
+            "For Movie search Please Use Cinema Kingdom Group.\n\n"
             f"ߑ https://t.me/{self.config.GROUP_USERNAME}",
             parse_mode=ParseMode.HTML
         )
