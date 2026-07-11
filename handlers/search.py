@@ -25,6 +25,21 @@ class SearchHandler:
         # Track users' group messages too, so both search query and bot result disappear.
         if chat.type in ("group", "supergroup"):
             self.db.add_message(chat.id, message.message_id, seconds=self.config.AUTO_DELETE_TIME)
+        if chat.type == "private":
+            sent = await message.reply_text(
+            "ߔ <b>Private Search Disabled</b>\n\n"
+            "Movie search করতে Cinema Kingdom Group ব্যবহার করুন.\n\n"
+            f"ߑ https://t.me/{self.config.GROUP_USERNAME}",
+            parse_mode=ParseMode.HTML
+        )
+
+            self.db.add_message(
+            sent.chat.id,
+            sent.message_id,
+            seconds=self.config.AUTO_DELETE_TIME
+        )
+
+        return
 
         if text == "🎬 Search Movie":
             sent = await message.reply_text("🎬 <b>Search Movie</b>\n\nType the movie name now.\nExample: <code>Avengers</code>", parse_mode=ParseMode.HTML)
