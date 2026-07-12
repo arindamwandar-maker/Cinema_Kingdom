@@ -16,17 +16,12 @@ class ShortenerService:
         response_format: str = "json"
     ):
         self.api_key = (api_key or "").strip()
-
         self.base_url = (
-            base_url
-            or "https://api.gplinks.com/api"
+            base_url or "https://api.gplinks.com/api"
         ).strip()
-
         self.alias = (alias or "").strip()
-
         self.response_format = (
-            response_format
-            or "json"
+            response_format or "json"
         ).strip().lower()
 
     @staticmethod
@@ -51,17 +46,13 @@ class ShortenerService:
 
         status = str(
             data.get("status", "")
-        ).lower()
+        ).strip().lower()
 
         if status == "error":
             logging.warning(
                 "GPLinks API error: %s",
-                data.get(
-                    "message",
-                    data
-                )
+                data.get("message", data)
             )
-
             return None
 
         possible_keys = (
@@ -83,10 +74,10 @@ class ShortenerService:
                 return value.strip()
 
             if isinstance(value, dict):
-                nested = self._extract_url(value)
+                nested_url = self._extract_url(value)
 
-                if nested:
-                    return nested
+                if nested_url:
+                    return nested_url
 
         return None
 
@@ -96,8 +87,7 @@ class ShortenerService:
     ) -> str:
 
         destination_url = (
-            destination_url
-            or ""
+            destination_url or ""
         ).strip()
 
         if not destination_url:
@@ -105,28 +95,22 @@ class ShortenerService:
 
         if not self.api_key:
             logging.warning(
-                "SHORTENER_API_KEY is missing. "
+                "SHORTENER_API_KEY missing. "
                 "Using direct Telegram link."
             )
             return destination_url
 
-        # The same custom alias cannot normally be reused.
-        # Add a unique suffix automatically.
-        alias_value = ""
+        aliases_to_try = []
 
         if self.alias:
             alias_prefix = self.alias.rstrip("-_")
-            alias_value = (
+
+            unique_alias = (
                 f"{alias_prefix}-"
                 f"{secrets.token_hex(4)}"
             )
 
-        # First try with unique alias.
-        # If alias fails, try again without alias.
-        aliases_to_try = []
-
-        if alias_value:
-            aliases_to_try.append(alias_value)
+            aliases_to_try.append(unique_alias)
 
         aliases_to_try.append("")
 
@@ -134,15 +118,15 @@ class ShortenerService:
             total=30
         )
 
-        for alias in aliases_to_try:
+        for alias_value in aliases_to_try:
 
             params = {
                 "api": self.api_key,
                 "url": destination_url
             }
 
-            if alias:
-                params["alias"] = alias
+            if alias_value:
+                params["alias"] = alias_value
 
             if self.response_format == "text":
                 params["format"] = "text"
@@ -180,11 +164,53 @@ class ShortenerService:
 
                         if response.status != 200:
                             logging.warning(
-                                "GPLinks HTTP error %s",
+                                "GPLinks HTTP error: %s",
                                 response.status
                             )
                             continue
 
-                        # Text response:
-                        # https://gplinks.co/xxxx
-                        if self._is
+                        if self._is_url(raw_text):
+                            return raw_text
+
+                        try:
+                            parsed_data = json.loads(
+                                raw_text
+                            )
+
+                        except json.JSONDecodeError:
+                            logging.warning(
+                                "GPLinks invalid response: %s",
+                                raw_text[:500]
+                            )
+                            continue
+
+                        short_url = self._extract_url(
+                            parsed_data
+                        )
+
+                        if short_url:
+                            return short_url
+
+                        logging.warning(
+                            "Unknown GPLinks response: %s",
+                            parsed_data
+                        )
+
+            except aiohttp.ClientError as exc:
+                logging.warning(
+                    "GPLinks network error: %s",
+                    exc
+                )
+
+            except Exception as exc:
+                logging.exception(
+                    "GPLinks unexpected error: %s",
+                    exc
+                )
+
+        logging.warning(
+            "GPLinks failed. "
+            "Using direct Telegram link."
+        )
+
+        return destination_url
