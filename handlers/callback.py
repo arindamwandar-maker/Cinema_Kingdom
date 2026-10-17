@@ -496,22 +496,80 @@ class CallbackHandler:
             short_link
         )
 
-        warning = ""
-
-        if short_link.startswith(
+        # A direct t.me link would hand out the file without the ad page, and
+        # that ad page is the only thing that pays. Burn the token and refuse.
+        if short_link == deep_link or short_link.startswith(
             (
                 "https://t.me/",
                 "http://t.me/",
             )
-        ) and self.db.is_admin(
-            user.id,
-            self.config.ADMIN_IDS
         ):
-            warning = (
-                "\n\n<i>⚠️ GPLinks was not used, so this click earns "
-                "nothing. Check SHORTENER_API_KEY and "
-                "~/logs/arindam2109.pythonanywhere.com.error.log.</i>"
+
+            self.token_manager.remove_token(
+                token
             )
+
+            cause = (
+                "SHORTENER_API_KEY is empty."
+                if not self.shortener.api_key
+                else "GPLinks did not return a short link."
+            )
+
+            logging.warning(
+                "Download refused for movie %s: %s",
+                movie_id,
+                cause
+            )
+
+            debug = ""
+
+            if self.db.is_admin(
+                user.id,
+                self.config.ADMIN_IDS
+            ):
+                debug = f"\n\n<i>{html.escape(cause)}</i>"
+
+            local_failure = datetime.now(
+                ZoneInfo(
+                    self.config.LOCAL_TIMEZONE
+                )
+            ).strftime(
+                "%Y-%m-%d %I:%M:%S %p"
+            )
+
+            try:
+                self.sheet.log_download_status(
+                    status="Shortener Failed",
+                    movie_name=movie["title"],
+                    movie_id=movie_id,
+                    user_id=user.id,
+                    username=(
+                        "@" + user.username
+                        if user.username
+                        else ""
+                    ),
+                    event_time=local_failure,
+                )
+
+            except Exception as exc:
+                logging.warning(
+                    "Sheet failure log failed: %s",
+                    exc
+                )
+
+            await query.edit_message_text(
+                "🚫 <b>Download unavailable</b>\n\n"
+                "The download service is temporarily down, so this movie "
+                "cannot be sent right now.\n\n"
+                "🔁 Please try again in a few minutes."
+                + debug,
+                parse_mode=ParseMode.HTML,
+                reply_markup=Keyboards.movie_button(
+                    movie_id
+                )
+            )
+
+            return
 
         # The file leaves only through the token inside the shortener link, so
         # nobody can collect it without finishing the ad page first.
@@ -577,8 +635,7 @@ class CallbackHandler:
             "✅ Your download link is ready.\n\n"
             f"{steps}\n"
             "⏳ The link message and movie file "
-            "will be removed after 5 minutes."
-            + warning,
+            "will be removed after 5 minutes.",
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.shortener_button(
                 short_link
