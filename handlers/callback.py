@@ -22,7 +22,8 @@ class CallbackHandler:
     def __init__(
         self,
         db: Database,
-        config: Config
+        config: Config,
+        bot=None
     ):
         self.db = db
         self.config = config
@@ -37,7 +38,8 @@ class CallbackHandler:
         )
 
         self.force_join = ForceJoinService(
-            config
+            config,
+            bot
         )
 
         self.token_manager = TokenManager(
@@ -194,11 +196,27 @@ class CallbackHandler:
 
             if not joined:
 
+                reason = ""
+
+                if (
+                    self.force_join.last_reason
+                    and self.db.is_admin(
+                        user.id,
+                        self.config.ADMIN_IDS
+                    )
+                ):
+                    reason = (
+                        "\n\n<i>"
+                        + html.escape(self.force_join.last_reason)
+                        + "</i>"
+                    )
+
                 await query.edit_message_text(
                     "🔒 <b>Access Denied</b>\n\n"
                     "Join the official channel and "
                     "community group first.\n\n"
-                    "Then press <b>I've Joined</b>.",
+                    "Then press <b>I've Joined</b>."
+                    + reason,
                     parse_mode=ParseMode.HTML,
                     reply_markup=(
                         Keyboards.force_join_menu(
@@ -423,6 +441,8 @@ class CallbackHandler:
         movie_id: int,
         context: ContextTypes.DEFAULT_TYPE
     ):
+        user = query.from_user
+
         movie = self.db.get_movie(
             movie_id
         )
@@ -476,18 +496,69 @@ class CallbackHandler:
             short_link
         )
 
+        # The file leaves only through the token inside the shortener link, so
+        # nobody can collect it without finishing the ad page first.
+        steps = (
+            "1️⃣ Press "
+            "<b>Click Here To Download Movie</b>.\n"
+            "2️⃣ Complete the page that opens.\n"
+            "3️⃣ The bot sends the movie file at once.\n"
+        )
+
+        local_time = datetime.now(
+            ZoneInfo(
+                self.config.LOCAL_TIMEZONE
+            )
+        ).strftime(
+            "%Y-%m-%d %I:%M:%S %p"
+        )
+
+        username_text = (
+            "@" + user.username
+            if user.username
+            else ""
+        )
+
+        event_id = self.db.log_link_event(
+            event_type="Link Generated",
+            movie_id=movie_id,
+            user_id=user.id,
+            username=username_text,
+            event_time=local_time,
+        )
+
+        try:
+            self.sheet.log_link_event(
+                event_id=event_id,
+                event_type="Link Generated",
+                movie_id=movie_id,
+                movie_name=movie["title"],
+                user_id=user.id,
+                username=username_text,
+                event_time=local_time,
+            )
+
+            self.sheet.log_download_status(
+                status="Link Generated",
+                movie_name=movie["title"],
+                movie_id=movie_id,
+                user_id=user.id,
+                username=username_text,
+                event_time=local_time,
+            )
+
+        except Exception as exc:
+            logging.warning(
+                "Sheet link log failed: %s",
+                exc
+            )
+
         await query.edit_message_text(
             f"🎬 <b>{html.escape(movie['title'])}</b>\n\n"
             f"💾 File Size: "
             f"<b>{self.format_size(movie.get('file_size'))}</b>\n\n"
             "✅ Your download link is ready.\n\n"
-            "1️⃣ Press "
-            "<b>Click Here To Download Movie</b>.\n"
-            f"2️⃣ The movie will be sent automatically "
-            f"after approximately "
-            f"<b>{self.config.AUTO_FILE_DELAY} seconds</b>.\n"
-            "3️⃣ You may continue through the "
-            "shortener page in the meantime.\n\n"
+            f"{steps}\n"
             "⏳ The link message and movie file "
             "will be removed after 5 minutes.",
             parse_mode=ParseMode.HTML,
@@ -506,147 +577,6 @@ class CallbackHandler:
                 seconds=(
                     self.config.AUTO_DELETE_TIME
                 )
-            )
-
-        # Option 2:
-        # Telegram cannot detect a URL-button click.
-        # The timer starts when the short link is generated.
-        context.job_queue.run_once(
-            self._send_movie_after_delay,
-            when=self.config.AUTO_FILE_DELAY,
-            data={
-                "chat_id": query.message.chat.id,
-                "movie_id": movie_id,
-                "user_id": query.from_user.id,
-                "username": (
-                    query.from_user.username
-                    or ""
-                )
-            },
-            name=(
-                f"auto-file-"
-                f"{query.from_user.id}-"
-                f"{movie_id}-"
-                f"{datetime.now().timestamp()}"
-            )
-        )
-
-    async def _send_movie_after_delay(
-        self,
-        context
-    ):
-        data = context.job.data or {}
-
-        chat_id = data.get(
-            "chat_id"
-        )
-
-        movie_id = data.get(
-            "movie_id"
-        )
-
-        if not chat_id or not movie_id:
-            return
-
-        movie = self.db.get_movie(
-            int(movie_id)
-        )
-
-        if not movie:
-
-            try:
-                sent = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=(
-                        "❌ Movie not found or deleted."
-                    )
-                )
-
-                self.db.add_message(
-                    sent.chat.id,
-                    sent.message_id,
-                    seconds=(
-                        self.config.AUTO_DELETE_TIME
-                    )
-                )
-
-            except Exception:
-                pass
-
-            return
-
-        try:
-            sent_file = (
-                await context.bot.send_document(
-                    chat_id=chat_id,
-                    document=movie["file_id"],
-                    caption=(
-                        f"🎬 <b>"
-                        f"{html.escape(movie['title'])}"
-                        f"</b>\n\n"
-                        "✅ Movie file delivered "
-                        "automatically.\n\n"
-                        "🍿 Enjoy watching!\n\n"
-                        "⏳ This file will be removed "
-                        "after 5 minutes."
-                    ),
-                    parse_mode=ParseMode.HTML
-                )
-            )
-
-            self.db.increment_downloads(
-                int(movie_id)
-            )
-
-            self.db.add_message(
-                sent_file.chat.id,
-                sent_file.message_id,
-                int(movie_id),
-                seconds=(
-                    self.config.AUTO_DELETE_TIME
-                )
-            )
-
-            # Optional Google Sheet event logging.
-            if hasattr(
-                self.sheet,
-                "log_link_event"
-            ):
-                try:
-                    local_time = datetime.now(
-                        ZoneInfo(
-                            self.config.LOCAL_TIMEZONE
-                        )
-                    ).strftime(
-                        "%Y-%m-%d %I:%M:%S %p"
-                    )
-
-                    self.sheet.log_link_event(
-                        event_id="",
-                        event_type="Auto File Delivered",
-                        movie_id=int(movie_id),
-                        movie_name=movie["title"],
-                        user_id=int(
-                            data.get("user_id")
-                            or 0
-                        ),
-                        username=(
-                            data.get("username")
-                            or ""
-                        ),
-                        event_time=local_time
-                    )
-
-                except Exception as exc:
-                    logging.warning(
-                        "Sheet delivery log failed: %s",
-                        exc
-                    )
-
-        except Exception as exc:
-            logging.warning(
-                "Automatic movie delivery failed: %s",
-                exc
             )
 
     @staticmethod

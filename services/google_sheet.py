@@ -20,6 +20,15 @@ class GoogleSheetService:
         'Local Date & Time',
     ]
 
+    DOWNLOAD_STATUS_HEADERS = [
+        'Movie Name',
+        'Movie ID',
+        'User ID',
+        'Username',
+        'Status',
+        'Local Date & Time',
+    ]
+
     STORAGE_HEADERS = [
         'Movie Name',
         'Movie ID',
@@ -303,6 +312,39 @@ class GoogleSheetService:
             return True
         except Exception as exc:
             logging.exception('Link Clicks sheet error: %s', exc)
+            return False
+
+    def log_download_status(
+        self,
+        status,
+        movie_name,
+        movie_id,
+        user_id,
+        username,
+        event_time,
+    ):
+        worksheet = self.get_or_create_worksheet(
+            'movie download status',
+            self.DOWNLOAD_STATUS_HEADERS,
+        )
+        if worksheet is None:
+            return False
+
+        try:
+            worksheet.append_row(
+                [
+                    movie_name or '',
+                    str(movie_id or ''),
+                    str(user_id or ''),
+                    username or '',
+                    status or '',
+                    event_time or '',
+                ],
+                value_input_option='USER_ENTERED',
+            )
+            return True
+        except Exception as exc:
+            logging.exception('movie download status sheet error: %s', exc)
             return False
 
     def test_connection(self):

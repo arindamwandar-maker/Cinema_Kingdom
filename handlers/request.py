@@ -1,5 +1,6 @@
 import html
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -33,6 +34,16 @@ class RequestHandler:
         request_id = self.db.add_request(user.id, movie_name)
         self.db.increment_user_requests(user.id)
         sheet_ok = self.sheet.add_request(request_id, user.id, user.username or '', user.first_name or '', movie_name, datetime.now())
+
+        local_time = datetime.now(ZoneInfo(self.config.LOCAL_TIMEZONE)).strftime('%Y-%m-%d %I:%M:%S %p')
+        self.sheet.log_download_status(
+            status='Requested',
+            movie_name=movie_name,
+            movie_id='',
+            user_id=user.id,
+            username=f'@{user.username}' if user.username else '',
+            event_time=local_time,
+        )
 
         for admin in self.config.ADMIN_IDS:
             try:

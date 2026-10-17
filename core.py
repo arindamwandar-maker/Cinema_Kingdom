@@ -48,9 +48,20 @@ class CinemaKingdomCore:
             self.config.SUPER_ADMIN_ID
         )
 
+        self.application = (
+            Application.builder()
+            .token(self.config.BOT_TOKEN)
+            .build()
+        )
+
+        # Handlers get this bot so services reuse the Application's connection
+        # pool instead of opening their own.
+        bot = self.application.bot
+
         self.start_handler = StartHandler(
             self.db,
-            self.config
+            self.config,
+            bot
         )
 
         self.search_handler = SearchHandler(
@@ -65,7 +76,8 @@ class CinemaKingdomCore:
 
         self.callback_handler = CallbackHandler(
             self.db,
-            self.config
+            self.config,
+            bot
         )
 
         self.storage_handler = StorageHandler(
@@ -94,12 +106,6 @@ class CinemaKingdomCore:
 
         self.promotion = PromotionService(
             self.config
-        )
-
-        self.application = (
-            Application.builder()
-            .token(self.config.BOT_TOKEN)
-            .build()
         )
 
         self._register_handlers()

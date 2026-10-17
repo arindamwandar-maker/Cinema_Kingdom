@@ -15,10 +15,10 @@ from services.token_manager import TokenManager
 
 
 class StartHandler:
-    def __init__(self, db: Database, config: Config):
+    def __init__(self, db: Database, config: Config, bot=None):
         self.db = db
         self.config = config
-        self.force_join = ForceJoinService(config)
+        self.force_join = ForceJoinService(config, bot)
         self.token_manager = TokenManager(db)
         self.sheet = GoogleSheetService(config)
 
@@ -56,6 +56,14 @@ class StartHandler:
             if movie_id is None:
                 sent = await message.reply_text('❌ This download link expired or is invalid. Generate a new link.')
                 self.db.add_message(sent.chat.id, sent.message_id, seconds=self.config.AUTO_DELETE_TIME)
+                self.sheet.log_download_status(
+                    status='Link Expired',
+                    movie_name='',
+                    movie_id='',
+                    user_id=user.id,
+                    username=f'@{user.username}' if user.username else '',
+                    event_time=datetime.now(ZoneInfo(self.config.LOCAL_TIMEZONE)).strftime('%Y-%m-%d %I:%M:%S %p'),
+                )
                 return
 
             movie = self.db.get_movie(movie_id)
@@ -79,6 +87,14 @@ class StartHandler:
                 event_type='File Delivered',
                 movie_id=movie_id,
                 movie_name=movie['title'],
+                user_id=user.id,
+                username=username_text,
+                event_time=local_time,
+            )
+            self.sheet.log_download_status(
+                status='File Delivered',
+                movie_name=movie['title'],
+                movie_id=movie_id,
                 user_id=user.id,
                 username=username_text,
                 event_time=local_time,
@@ -108,10 +124,21 @@ class StartHandler:
 
     async def force_join_message(self, update: Update):
         message = update.effective_message
+        user = update.effective_user
         if not message:
             return
+
+        reason = ""
+
+        if (
+            user
+            and self.force_join.last_reason
+            and self.db.is_admin(user.id, self.config.ADMIN_IDS)
+        ):
+            reason = f"\n\n<i>{html.escape(self.force_join.last_reason)}</i>"
+
         await message.reply_text(
-            "🔒 <b>Access Restricted</b>\n\nJoin the official channel and community group first, then press <b>I've Joined</b>.",
+            "🔒 <b>Access Restricted</b>\n\nJoin the official channel and community group first, then press <b>I've Joined</b>." + reason,
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.force_join_menu(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME),
         )

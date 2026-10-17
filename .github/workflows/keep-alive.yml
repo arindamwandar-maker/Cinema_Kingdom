@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Run due jobs
         env:
-          TICK_URL: https://yourusername.pythonanywhere.com/tick
+          TICK_URL: https://arindam2109.pythonanywhere.com/tick
           KEEP_ALIVE_TOKEN: ${{ secrets.KEEP_ALIVE_TOKEN }}
         run: |
           curl --fail-with-body --silent --show-error \
