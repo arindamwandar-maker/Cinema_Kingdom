@@ -133,7 +133,10 @@ class ShortenerService:
 
             try:
                 async with aiohttp.ClientSession(
-                    timeout=timeout
+                    timeout=timeout,
+                    # PythonAnywhere free has no direct outbound internet; only
+                    # aiohttp's trust_env picks up HTTPS_PROXY=proxy.server:3128.
+                    trust_env=True
                 ) as session:
 
                     async with session.get(

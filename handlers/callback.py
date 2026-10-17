@@ -496,6 +496,23 @@ class CallbackHandler:
             short_link
         )
 
+        warning = ""
+
+        if short_link.startswith(
+            (
+                "https://t.me/",
+                "http://t.me/",
+            )
+        ) and self.db.is_admin(
+            user.id,
+            self.config.ADMIN_IDS
+        ):
+            warning = (
+                "\n\n<i>⚠️ GPLinks was not used, so this click earns "
+                "nothing. Check SHORTENER_API_KEY and "
+                "~/logs/arindam2109.pythonanywhere.com.error.log.</i>"
+            )
+
         # The file leaves only through the token inside the shortener link, so
         # nobody can collect it without finishing the ad page first.
         steps = (
@@ -560,7 +577,8 @@ class CallbackHandler:
             "✅ Your download link is ready.\n\n"
             f"{steps}\n"
             "⏳ The link message and movie file "
-            "will be removed after 5 minutes.",
+            "will be removed after 5 minutes."
+            + warning,
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.shortener_button(
                 short_link
