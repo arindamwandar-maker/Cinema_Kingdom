@@ -138,6 +138,33 @@ class Config:
     ).strip()
 
     # =========================
+    # Webhook (PythonAnywhere / any WSGI host)
+    # =========================
+
+    # Only the site address, no trailing slash and no path.
+    # Example: https://yourusername.pythonanywhere.com
+    WEBHOOK_BASE_URL = os.getenv(
+        "WEBHOOK_BASE_URL",
+        ""
+    ).strip().rstrip("/")
+
+    WEBHOOK_PATH = "/telegram-webhook"
+
+    WEBHOOK_URL = (
+        f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}"
+        if WEBHOOK_BASE_URL
+        else ""
+    )
+
+    # Long random string, sent by Telegram as a header on every update.
+    # Generate one with: python setup_hook.py --make-secret
+    # Anybody who knows your site address can otherwise inject fake updates.
+    WEBHOOK_SECRET_TOKEN = os.getenv(
+        "WEBHOOK_SECRET_TOKEN",
+        ""
+    ).strip()
+
+    # =========================
     # Database / Settings
     # =========================
 
@@ -199,7 +226,7 @@ class Config:
         120,
         _safe_int(
             os.getenv("PROMO_INTERVAL"),
-            120
+            3600
         )
     )
 

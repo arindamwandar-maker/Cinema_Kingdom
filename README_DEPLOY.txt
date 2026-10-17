@@ -1,67 +1,204 @@
-CINEMA KINGDOM - CK_V!
+CINEMA KINGDOM - DEPLOYING ON A FREE 24/7 HOST
+
+The bot now has two entry points:
+
+  web.py       Telegram pushes updates to it. Runs as a web app. (free 24/7)
+  bot.py       Old polling mode, for a host that keeps one process running
+               (Railway, Termux). Registers the timed jobs itself.
+
+services/jobs.py holds the timed jobs (auto-delete, Google Sheet sync,
+promotion) so web.py and bot.py share one implementation.
+
+
+WHY THE POLLING MODE WAS DROPPED
+
+app.run_polling() plus the JobQueue needs one process that never exits.
+No free host gives that away any more: Render and Koyeb put free workers to
+sleep, and PythonAnywhere free has no always-on process and no scheduled
+tasks at all. A web app, in contrast, is online 24/7 on the free tier, so the
+bot answers as a webhook instead.
+
+
+FREE SETUP ON PYTHONANYWHERE (no credit card)
+
+1. Register
+   Go to pythonanywhere.com -> Sign up. Pick the free/Beginner account.
+   No card is asked for. Choose a username you like, it becomes part of your
+   site address: https://YOURUSERNAME.pythonanywhere.com
+
+2. Get the code
+   Click "Bash" (a console). Type these lines, pressing Enter after each:
+
+     git clone https://github.com/arindamwandar-maker/Cinema_Kingdom.git
+     cd Cinema_Kingdom
+     pip3 install --user -r requirements.txt
+
+3. Put your secrets in a .env file
+   Still in the console:
+
+     cp .env.example .env
+     nano .env
+
+   Fill at least BOT_TOKEN and GOOGLE_CREDENTIALS_BASE64, exactly the values
+   you had in Railway Variables. Save with Ctrl+O, Enter, then exit with
+   Ctrl+X.
+
+4. Create the webhook secret
+     python3 setup_hook.py --make-secret
+
+   Copy the printed WEBHOOK_SECRET_TOKEN line into .env (step 3 style editing).
+
+5. Set the webhook address
+   Also in .env:
+
+     WEBHOOK_BASE_URL=https://YOURUSERNAME.pythonanywhere.com
+
+6. Tell Telegram to use the webhook
+     cd ~/Cinema_Kingdom
+     python3 setup_hook.py
+
+   It should print "Webhook registered" and then the webhook info from
+   Telegram. Keep that output, it proves the switch happened.
+
+7. Point the web app at web.py
+   Web tab -> "Configure" -> choose Flask -> in "Source code" and "Working
+   directory" write /home/YOURUSERNAME/Cinema_Kingdom -> Continue.
+   Then on the same Web tab click the "WSGI configuration file" link,
+   select all of its contents, delete them, and paste the contents of
+   pythonanywhere_wsgi.py from the repo (change PROJECT_DIR only if your
+   folder is named differently). Click Reload.
+
+8. Check it is alive
+   Open https://YOURUSERNAME.pythonanywhere.com/healthz in a browser.
+   "ready": true means the bot is running. If it says false, "boot_error"
+   tells you what went wrong. Send /start to the bot as the real test.
+
+9. Keep the timed jobs running while the chat is quiet
+   GitHub -> Cinema_Kingdom -> Settings -> Secrets and variables -> Actions
+   -> "New repository secret":
+       Name  KEEP_ALIVE_TOKEN
+       Value the same WEBHOOK_SECRET_TOKEN string from step 4
+   Then edit .github/workflows/keep-alive.yml and replace yourusername in
+   TICK_URL with your real PythonAnywhere username. Commit the change.
+   That workflow calls /tick every 10 minutes, which is what fires the
+   promotion message and the cleanup when nobody is posting.
+
+10. Stop the Railway service
+    Do this last, and do it for real. Only one delivery method may be active:
+    while the Railway bot is still polling, Telegram reports 409 Conflict.
+    Railway -> your project -> Service -> Settings -> Stop (or delete it).
+
+
+MOVING YOUR OLD DATABASE
+
+Your movies live in bot.db. Download it from Railway (or take it from a
+backup) and upload it into /home/YOURUSERNAME/Cinema_Kingdom, then from the
+console:
+
+     cd ~/Cinema_Kingdom
+     chmod ug+rw bot.db
+
+DB_PATH is just "bot.db", so the file stays inside the project folder, which
+is persistent - redeploying does not wipe it, unlike Railway without a volume.
+
+
+THINGS THAT BEHAVE DIFFERENTLY FROM RAILWAY
+
+* Expired download messages are removed within 30 seconds while the group is
+  active. In a completely quiet chat the next removal waits for the next
+  /tick, so up to about 10 minutes.
+* The promotion message fires on the tick, so it can be a few minutes off.
+* PythonAnywhere free only allows outbound calls to its allowlist.
+  api.telegram.org and *.googleapis.com are already allowed, so Telegram and
+  Google Sheets work. api.gplinks.com is not: until it is added, the bot
+  falls back to the direct Telegram link, which still works. Ask for the
+  domain in the PythonAnywhere "Code for business" forum to enable GPLinks.
+* Free tier gives about 512 MB of disk and a daily CPU cap. The bot stores
+  Telegram file ids, not the files, so the database stays small.
+
+
+KEEPING THE FREE ACCOUNT ALIVE
+
+PythonAnywhere pauses free accounts that are not looked at. Once every three
+months, log in and click the "Extend free account" button on the dashboard,
+otherwise the site stops answering and Telegram will drop the webhook.
+Nothing else needs restarting: the web app is always on, and the GitHub
+workflow is always scheduled.
+
+
+BACKUPS
+
+bot.db is the whole catalogue. Once a month, in the Files tab, right-click
+bot.db and download it. Losing the database means re-uploading every movie.
+
+
+ORIGINAL FUNCTIONAL NOTES (unchanged)
 
 IMPORTANT
-1. Run only one bot instance. Multiple Railway/Termux instances cause Telegram getUpdates Conflict.
-2. Add the bot as admin in the main group, community channel and MyStorage channel.
+1. Run only one bot instance. Multiple Railway/Termux instances cause
+   Telegram getUpdates Conflict.
+2. Add the bot as admin in the main group, community channel and MyStorage
+   channel.
 3. In the main group enable Delete Messages permission.
-4. For old movies to survive redeploys, attach a Railway volume at /data and set DB_PATH=/data/bot.db.
-   Without persistent storage, Railway can remove bot.db during redeploy.
+4. For old movies to survive redeploys, keep DB_PATH inside the project
+   folder (it is persistent on PythonAnywhere). On Railway a volume was
+   needed at /data with DB_PATH=/data/bot.db.
 
 GOOGLE SHEET
-- Create one spreadsheet and share it as Editor with the service account client_email.
+- Create one spreadsheet and share it as Editor with the service account
+  client_email.
 - Set GOOGLE_SHEET_URL.
-- Recommended: Base64 encode the entire credentials JSON file and set GOOGLE_CREDENTIALS_BASE64.
+- Recommended: base64 encode the whole credentials JSON and set
+  GOOGLE_CREDENTIALS_BASE64.
 - The bot creates/uses worksheets named Movie Requests and Storage Uploads.
 - Test with /sheettest as an admin.
 
 SEARCH FLOW
-- Users search only in GROUP_ID.
-- Private DM search is disabled.
+- Users search only in GROUP_ID. Private DM search is disabled.
 - Search result movie button opens the private bot.
 - Generate Download Link creates a 5-minute token.
-- If no shortener is configured or the provider blocks Railway, the bot uses the direct Telegram token link.
+- If no shortener is configured or the provider is blocked, the bot uses the
+  direct Telegram token link.
 
 DELETE / RESTORE
 - In MyStorage use /delete MovieID, for example /delete 12.
-- Delete is soft delete: record remains in SQLite, disappears from search, and Google Sheet Status becomes Movie Deleted.
+- Delete is soft delete: record remains in SQLite, disappears from search,
+  and Google Sheet Status becomes Movie Deleted.
 - Use /restore MovieID to restore a soft-deleted record.
 
 ADMIN
 - Super admin can use /addadmin ID and /removeadmin ID.
-- /admins lists admins.
-- Admins bypass group cooldown.
+- /admins lists admins. Admins bypass group cooldown.
 
 GOOGLE SHEET MOVIE NAME SYNC
 - Edit Movie Name in the Storage Uploads worksheet.
-- The bot checks for changes every 60 seconds.
+- The bot checks for changes on every job run.
 - It updates the database title and the original MyStorage post caption.
-- Telegram does not allow renaming the actual uploaded filename; only the caption/title changes.
-- Optional Railway variable: SHEET_SYNC_INTERVAL=60
+- Telegram does not allow renaming the actual uploaded filename; only the
+  caption/title changes.
 
-NEW FEATURES
-- Google Sheet movie-name sync runs every SHEET_SYNC_INTERVAL seconds.
-- Bot needs Edit Messages permission in MyStorage to change the original file caption.
+FEATURES
 - Promotional join message runs every PROMO_INTERVAL seconds (minimum 120).
-- Bot needs Ban Users/Delete Messages permissions in the main group for link moderation.
+- Bot needs Ban Users/Delete Messages permissions in the main group for link
+  moderation, and Edit Messages in MyStorage to change file captions.
 - Duplicate uploads require admin confirmation through inline buttons.
 - 18+ searches require age confirmation.
 
-
 ADMIN SEND COMMANDS
 - /sendgroup Your message -> sends to the main group with Join buttons.
-- /sendchannel Your message -> sends to the community channel with Join buttons.
+- /sendchannel Your message -> sends to the community channel with buttons.
 - /sendboth Your message -> sends to both.
 - You can also reply to an existing text message with one of these commands.
 
 GPLINKS SHORTENER
-- Set SHORTENER_BASE_URL=https://api.gplinks.com/api
-- Set SHORTENER_API_KEY in Railway Variables.
-- SHORTENER_ALIAS is optional; the bot adds a unique suffix to prevent duplicate-alias errors.
-- SHORTENER_RESPONSE_FORMAT can be json or text.
+- Set SHORTENER_BASE_URL=https://api.gplinks.com/api and SHORTENER_API_KEY.
+- SHORTENER_ALIAS is optional; the bot adds a unique suffix to prevent
+  duplicate-alias errors. SHORTENER_RESPONSE_FORMAT can be json or text.
 
 LINK TRACKING
-- Link Generated is recorded when a user presses Generate Download Link.
-- File Delivered is recorded when the user returns through the token and receives the file.
-- Google Sheet worksheet: Link Clicks.
-- LOCAL_TIMEZONE defaults to Asia/Kolkata.
-- GPLinks external page clicks cannot be known exactly without a GPLinks webhook/reporting API; the bot records generation and successful delivery events.
+- "Link Generated" is recorded when a user presses Generate Download Link.
+- "File Delivered" is recorded when the user returns through the token and
+  receives the file. Worksheet: Link Clicks. LOCAL_TIMEZONE defaults to
+  Asia/Kolkata.
+- GPLinks external page clicks cannot be known exactly without a GPLinks
+  webhook/reporting API; the bot records generation and delivery events.

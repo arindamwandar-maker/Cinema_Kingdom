@@ -1,0 +1,32 @@
+# Runs the bot's timed jobs while the chat is quiet.
+#
+# Setup (once):
+#   1. GitHub -> this repo -> Settings -> Secrets and variables -> Actions
+#      -> New repository secret
+#      Name: KEEP_ALIVE_TOKEN
+#      Value: the same string as WEBHOOK_SECRET_TOKEN in your .env
+#   2. Replace TICK_URL below with your own site address.
+#
+# GitHub runs scheduled workflows a few minutes late under load, which is
+# fine: the jobs check their own intervals instead of relying on exact timing.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Run due jobs
+        env:
+          TICK_URL: https://yourusername.pythonanywhere.com/tick
+          KEEP_ALIVE_TOKEN: ${{ secrets.KEEP_ALIVE_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --max-time 40 \
+            -H "X-Keep-Alive-Token: $KEEP_ALIVE_TOKEN" \
+            "$TICK_URL"
