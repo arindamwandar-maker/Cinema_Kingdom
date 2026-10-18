@@ -17,9 +17,13 @@ class ShortenerService:
         response_format: str = "json"
     ):
         self.api_key = (api_key or "").strip()
-        self.base_url = (
-            base_url or "https://shrinkme.io/api"
-        ).strip()
+
+        # A key pasted into SHORTENER_BASE_URL by mistake would silently break
+        # every request, so only the host and path are kept.
+        base_url = (base_url or "https://shrinkme.io/api").strip()
+        self.base_url = base_url.split("?")[0].strip() or (
+            "https://shrinkme.io/api"
+        )
         self.alias = (alias or "").strip()
         self.response_format = (
             response_format or "json"
@@ -255,6 +259,15 @@ class ShortenerService:
                 self.last_error = (
                     type(exc).__name__ + ": " + str(exc)[:180]
                 )
+
+                if "Proxy" in type(
+                    exc
+                ).__name__:
+                    self.last_error += (
+                        " — the hosting provider refuses this site. "
+                        "Ask PythonAnywhere to allow the shortener domain, "
+                        "or use a host with open outbound internet."
+                    )
 
                 logging.warning(
                     "Shortener network error: %s",
