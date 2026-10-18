@@ -496,26 +496,28 @@ class CallbackHandler:
             short_link
         )
 
-        # A direct t.me link would hand out the file without the ad page, and
-        # that ad page is the only thing that pays. Burn the token and refuse.
-        if short_link == deep_link or short_link.startswith(
+        no_ad_page = short_link == deep_link or short_link.startswith(
             (
                 "https://t.me/",
                 "http://t.me/",
             )
-        ):
+        )
+
+        cause = (
+            "SHORTENER_API_KEY is empty."
+            if not self.shortener.api_key
+            else (
+                self.shortener.base_url.split("//")[-1].split("/")[0]
+                + " did not return a short link."
+            )
+        )
+
+        # A direct t.me link hands out the file without the ad page, which is
+        # the only thing that pays, so it is refused unless he opts in.
+        if no_ad_page and not self.config.ALLOW_DIRECT_LINK:
 
             self.token_manager.remove_token(
                 token
-            )
-
-            cause = (
-                "SHORTENER_API_KEY is empty."
-                if not self.shortener.api_key
-                else (
-                    self.shortener.base_url.split("//")[-1].split("/")[0]
-                    + " did not return a short link."
-                )
             )
 
             logging.warning(
@@ -589,6 +591,25 @@ class CallbackHandler:
             "3️⃣ The bot sends the movie file at once.\n"
         )
 
+        status_text = (
+            "Direct Link"
+            if no_ad_page
+            else "Link Generated"
+        )
+
+        warning = ""
+
+        if no_ad_page and self.db.is_admin(
+            user.id,
+            self.config.ADMIN_IDS
+        ):
+            warning = (
+                "\n\n<i>⚠️ No ad ran on this click. "
+                + html.escape(cause)
+                + " ALLOW_DIRECT_LINK is on, so the file still goes out - "
+                + "set it to false for strict ad-only delivery.</i>"
+            )
+
         local_time = datetime.now(
             ZoneInfo(
                 self.config.LOCAL_TIMEZONE
@@ -604,7 +625,7 @@ class CallbackHandler:
         )
 
         event_id = self.db.log_link_event(
-            event_type="Link Generated",
+            event_type=status_text,
             movie_id=movie_id,
             user_id=user.id,
             username=username_text,
@@ -614,7 +635,7 @@ class CallbackHandler:
         try:
             self.sheet.log_link_event(
                 event_id=event_id,
-                event_type="Link Generated",
+                event_type=status_text,
                 movie_id=movie_id,
                 movie_name=movie["title"],
                 user_id=user.id,
@@ -623,7 +644,7 @@ class CallbackHandler:
             )
 
             self.sheet.log_download_status(
-                status="Link Generated",
+                status=status_text,
                 movie_name=movie["title"],
                 movie_id=movie_id,
                 user_id=user.id,
@@ -644,7 +665,8 @@ class CallbackHandler:
             "✅ Your download link is ready.\n\n"
             f"{steps}\n"
             "⏳ The link message and movie file "
-            "will be removed after 5 minutes.",
+            "will be removed after 5 minutes."
+            + warning,
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.shortener_button(
                 short_link

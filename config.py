@@ -113,6 +113,14 @@ class Config:
         "json"
     ).strip().lower() or "json"
 
+    # True: if the ad site cannot make a short link, still send the movie
+    # through the direct Telegram link (users get files, this click earns
+    # nothing).  False: refuse the download instead - no ad, no file.
+    ALLOW_DIRECT_LINK = os.getenv(
+        "ALLOW_DIRECT_LINK",
+        "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+
     # =========================
     # Google Sheet
     # =========================
