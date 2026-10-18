@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import secrets
 from typing import Any, Optional
 
@@ -23,6 +24,28 @@ class ShortenerService:
         self.response_format = (
             response_format or "json"
         ).strip().lower()
+
+        # PythonAnywhere free has no direct internet; the proxy name is only
+        # reliably present in lowercase, which aiohttp's trust_env misses.
+        self.proxy = (
+            os.environ.get("HTTPS_PROXY")
+            or os.environ.get("https_proxy")
+            or os.environ.get("HTTP_PROXY")
+            or os.environ.get("http_proxy")
+            or ""
+        ).strip()
+
+        self.last_error = "not called yet"
+        self.last_status = None
+
+    def describe(self):
+        return (
+            f"base_url: {self.base_url}\n"
+            f"api key: {'set (' + str(len(self.api_key)) + ' chars)' if self.api_key else 'EMPTY'}\n"
+            f"proxy: {self.proxy or 'none in environment'}\n"
+            f"last http status: {self.last_status}\n"
+            f"last error: {self.last_error}"
+        )
 
     @staticmethod
     def _is_url(value: Any) -> bool:
@@ -49,6 +72,11 @@ class ShortenerService:
         ).strip().lower()
 
         if status == "error":
+            self.last_error = (
+                "API said: "
+                + str(data.get("message", data))[:180]
+            )
+
             logging.warning(
                 "Shortener API error: %s",
                 data.get("message", data)
@@ -136,14 +164,16 @@ class ShortenerService:
             try:
                 async with aiohttp.ClientSession(
                     timeout=timeout,
-                    # PythonAnywhere free has no direct outbound internet; only
-                    # aiohttp's trust_env picks up HTTPS_PROXY=proxy.server:3128.
                     trust_env=True
                 ) as session:
 
                     async with session.get(
                         self.base_url,
                         params=params,
+                        proxy=(
+                            self.proxy
+                            or None
+                        ),
                         allow_redirects=True,
                         headers={
                             "User-Agent": (
@@ -161,6 +191,8 @@ class ShortenerService:
                             await response.text()
                         ).strip()
 
+                        self.last_status = response.status
+
                         logging.info(
                             "Shortener status=%s response=%s",
                             response.status,
@@ -168,6 +200,13 @@ class ShortenerService:
                         )
 
                         if response.status != 200:
+                            self.last_error = (
+                                "HTTP "
+                                + str(response.status)
+                                + ": "
+                                + raw_text[:180]
+                            )
+
                             logging.warning(
                                 "Shortener HTTP error: %s",
                                 response.status
@@ -175,6 +214,7 @@ class ShortenerService:
                             continue
 
                         if self._is_url(raw_text):
+                            self.last_error = "ok"
                             return raw_text
 
                         try:
@@ -183,6 +223,10 @@ class ShortenerService:
                             )
 
                         except json.JSONDecodeError:
+                            self.last_error = (
+                                "not JSON: " + raw_text[:180]
+                            )
+
                             logging.warning(
                                 "Shortener invalid response: %s",
                                 raw_text[:500]
@@ -194,7 +238,13 @@ class ShortenerService:
                         )
 
                         if short_url:
+                            self.last_error = "ok"
                             return short_url
+
+                        self.last_error = (
+                            "no short link in response: "
+                            + str(parsed_data)[:180]
+                        )
 
                         logging.warning(
                             "Unknown shortener response: %s",
@@ -202,12 +252,20 @@ class ShortenerService:
                         )
 
             except aiohttp.ClientError as exc:
+                self.last_error = (
+                    type(exc).__name__ + ": " + str(exc)[:180]
+                )
+
                 logging.warning(
                     "Shortener network error: %s",
                     exc
                 )
 
             except Exception as exc:
+                self.last_error = (
+                    type(exc).__name__ + ": " + str(exc)[:180]
+                )
+
                 logging.exception(
                     "Shortener unexpected error: %s",
                     exc
@@ -215,7 +273,7 @@ class ShortenerService:
 
         logging.warning(
             "Shortener failed. "
-            "Using direct Telegram link."
+            "Refusing to hand out the direct link."
         )
 
         return destination_url

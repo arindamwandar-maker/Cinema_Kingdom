@@ -530,7 +530,13 @@ class CallbackHandler:
                 user.id,
                 self.config.ADMIN_IDS
             ):
-                debug = f"\n\n<i>{html.escape(cause)}</i>"
+                debug = (
+                    "\n\n<i>"
+                    + html.escape(cause)
+                    + "\n"
+                    + html.escape(self.shortener.describe())
+                    + "\nRun /adtest for this check anytime.</i>"
+                )
 
             local_failure = datetime.now(
                 ZoneInfo(

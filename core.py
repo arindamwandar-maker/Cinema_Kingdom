@@ -240,6 +240,13 @@ class CinemaKingdomCore:
             )
         )
 
+        app.add_handler(
+            CommandHandler(
+                "adtest",
+                self.admin_handler.ad_test
+            )
+        )
+
         # =========================
         # STORAGE COMMANDS
         # =========================

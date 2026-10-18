@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 from config import Config
 from database import Database
 from services.google_sheet import GoogleSheetService
+from services.shortener import ShortenerService
 
 
 class AdminHandler:
@@ -15,6 +16,12 @@ class AdminHandler:
         self.db = db
         self.config = config
         self.sheet = GoogleSheetService(config)
+        self.shortener = ShortenerService(
+            config.SHORTENER_API_KEY,
+            config.SHORTENER_BASE_URL,
+            config.SHORTENER_ALIAS,
+            config.SHORTENER_RESPONSE_FORMAT,
+        )
 
     def is_admin(self, user_id: int) -> bool:
         return self.db.is_admin(user_id, self.config.ADMIN_IDS)
@@ -260,3 +267,18 @@ class AdminHandler:
             return
         ok, result = self.sheet.test_connection()
         await message.reply_text(('✅ ' if ok else '❌ ') + result)
+
+    async def ad_test(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user, message = update.effective_user, update.effective_message
+        if not user or not message or not self.is_admin(user.id):
+            return
+
+        probe = 'https://t.me/Cinema_Valut_bot?start=adtest'
+        result = await self.shortener.shorten_link(probe)
+
+        if result == probe:
+            head = '❌ No ad link was created. The movie would be blocked.\n\n'
+        else:
+            head = '✅ Ad link works: ' + result + '\n\n'
+
+        await message.reply_text(head + self.shortener.describe())
