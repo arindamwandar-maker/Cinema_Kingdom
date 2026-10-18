@@ -9,21 +9,66 @@ from database import Database
 from keyboards import Keyboards
 
 
+def render_search_results(
+    query_text: str,
+    movies,
+    page: int,
+    page_size: int,
+    bot_username: str,
+    heading: str = '🎬 <b>Search Results</b>'
+):
+    """Build one page of search results as (message text, keyboard).
+
+    Used for a normal search and for the 18+ confirmation, and again when a
+    page button is pressed, so all three always look the same.
+    """
+    total = len(movies)
+    page_size = max(1, page_size)
+    total_pages = (total + page_size - 1) // page_size
+
+    if not Keyboards.paginates(total_pages, query_text):
+        page, total_pages, page_size = 1, 1, max(total, 1)
+
+    page = min(max(page, 1), total_pages)
+    start = (page - 1) * page_size
+    page_movies = movies[start:start + page_size]
+
+    lines = [
+        f'🔎 <b>Search Query</b> — <code>{html.escape(query_text)}</code>',
+        '',
+        f'{heading} — <b>{total} nos</b>',
+    ]
+
+    if total_pages > 1:
+        numbers = ', '.join(
+            f'<b>{candidate}</b>' if candidate == page else str(candidate)
+            for candidate in range(1, total_pages + 1)
+        )
+        lines.append(f'📄 <b>Pages</b> — {numbers}')
+
+    lines.append('')
+
+    for index, movie in enumerate(page_movies, start=start + 1):
+        lines.append(
+            f'<b>{index} nos</b> — {html.escape(movie["title"])}'
+            f' ({Keyboards.format_size(movie.get("file_size"))})'
+        )
+
+    keyboard = Keyboards.search_results_keyboard(
+        page_movies,
+        bot_username,
+        page,
+        total_pages,
+        query_text
+    )
+
+    return '\n'.join(lines), keyboard
+
+
 class SearchHandler:
     def __init__(self, db: Database, config: Config):
         self.db = db
         self.config = config
-
-    @staticmethod
-    def format_size(size):
-        if not size:
-            return 'Unknown'
-        value = float(size)
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if value < 1024:
-                return f'{value:.1f} {unit}'
-            value /= 1024
-        return f'{value:.1f} PB'
 
     def is_adult_query(self, text: str) -> bool:
         lowered = (text or '').lower()
@@ -132,7 +177,7 @@ class SearchHandler:
         if not movies:
             safe = html.escape(text)
             sent = await message.reply_text(
-                f'❌ <b>No movie found</b>\n\nSearch: <code>{safe}</code>\n\nRequest it using <code>/request {safe}</code>.',
+                f'❌ <b>No movie found</b>\n\n🔎 <b>Search Query</b> — <code>{safe}</code>\n\nRequest it using <code>/request {safe}</code>.',
                 parse_mode=ParseMode.HTML,
                 reply_to_message_id=message.message_id,
             )
@@ -142,17 +187,18 @@ class SearchHandler:
         bot_info = await context.bot.get_me()
         username = bot_info.username or self.config.BOT_USERNAME
 
-        lines = ['🎬 <b>Search Results</b>', '']
-        for index, movie in enumerate(movies, start=1):
-            title = html.escape(movie['title'])
-            size = self.format_size(movie.get('file_size'))
-            lines.append(f'{index}. <b>{title}</b> — {size}')
-        lines.extend(['', 'Select your movie below.'])
+        result_text, keyboard = render_search_results(
+            text,
+            movies,
+            1,
+            self.config.SEARCH_RESULTS_PER_PAGE,
+            username
+        )
 
         result = await message.reply_text(
-            '\n'.join(lines),
+            result_text,
             parse_mode=ParseMode.HTML,
-            reply_markup=Keyboards.movie_buttons(movies, username),
+            reply_markup=keyboard,
             reply_to_message_id=message.message_id,
         )
         self.db.add_message(result.chat.id, result.message_id, seconds=self.config.AUTO_DELETE_TIME)

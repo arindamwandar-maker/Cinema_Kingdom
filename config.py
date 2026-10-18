@@ -201,7 +201,16 @@ class Config:
         1,
         _safe_int(
             os.getenv("MAX_MOVIES_PER_SEARCH"),
-            10
+            15
+        )
+    )
+
+    # Movie buttons shown per search result page.
+    SEARCH_RESULTS_PER_PAGE = max(
+        1,
+        _safe_int(
+            os.getenv("SEARCH_RESULTS_PER_PAGE"),
+            5
         )
     )
 

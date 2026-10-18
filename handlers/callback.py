@@ -5,11 +5,13 @@ from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from config import Config
 from database import Database
 from keyboards import Keyboards
+from handlers.search import render_search_results
 from services.force_join import ForceJoinService
 from services.google_sheet import GoogleSheetService
 from services.shortener import ShortenerService
@@ -184,6 +186,20 @@ class CallbackHandler:
             return
 
         # =========================
+        # Search result pages
+        # =========================
+
+        if data.startswith("sp"):
+
+            await self.change_search_page(
+                query,
+                context,
+                data
+            )
+
+            return
+
+        # =========================
         # Force join
         # =========================
 
@@ -322,6 +338,61 @@ class CallbackHandler:
 
             return
 
+    async def change_search_page(
+        self,
+        query,
+        context,
+        data: str
+    ):
+        """Show another page of a search inside the same group message."""
+        page_text, _, search_text = data[2:].partition("|")
+
+        try:
+            page = int(page_text)
+        except ValueError:
+            logging.warning("Search page button without a page number: %s", data)
+            return
+
+        if not search_text or not query.message:
+            return
+
+        movies = self.db.search_movies(
+            search_text,
+            self.config.MAX_MOVIES_PER_SEARCH
+        )
+
+        if not movies:
+
+            await query.edit_message_text(
+                "❌ <b>This search has no results now.</b>\n\n"
+                f"🔎 <b>Search Query</b> — <code>{html.escape(search_text)}</code>",
+                parse_mode=ParseMode.HTML
+            )
+
+            return
+
+        bot_info = await context.bot.get_me()
+
+        text, keyboard = render_search_results(
+            search_text,
+            movies,
+            page,
+            self.config.SEARCH_RESULTS_PER_PAGE,
+            bot_info.username or self.config.BOT_USERNAME
+        )
+
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard
+            )
+
+        except TelegramError as exc:
+            # Telegram rejects pressing the page you are already on, and a
+            # stale button on a message the cleanup already deleted.
+            logging.info("Search page edit skipped: %s", exc)
+
     async def _send_adult_search_results(
         self,
         query,
@@ -337,7 +408,7 @@ class CallbackHandler:
 
             await query.edit_message_text(
                 "❌ <b>No movie found</b>\n\n"
-                f"Search: <code>{html.escape(text)}</code>",
+                f"🔎 <b>Search Query</b> — <code>{html.escape(text)}</code>",
                 parse_mode=ParseMode.HTML
             )
 
@@ -345,40 +416,24 @@ class CallbackHandler:
 
         bot_info = await context.bot.get_me()
 
-        bot_username = (
-            bot_info.username
-            or self.config.BOT_USERNAME
-        )
-
-        lines = [
-            "🔞 <b>18+ Search Results</b>",
-            ""
-        ]
-
-        for index, movie in enumerate(
+        result_text, keyboard = render_search_results(
+            text,
             movies,
-            start=1
-        ):
-            lines.append(
-                f"{index}. "
-                f"<b>{html.escape(movie['title'])}</b>"
-                f" — "
-                f"{self.format_size(movie.get('file_size'))}"
-            )
-
-        lines.extend([
-            "",
-            "Select your movie below."
-        ])
-
-        await query.edit_message_text(
-            "\n".join(lines),
-            parse_mode=ParseMode.HTML,
-            reply_markup=Keyboards.movie_buttons(
-                movies,
-                bot_username
-            )
+            1,
+            self.config.SEARCH_RESULTS_PER_PAGE,
+            bot_info.username or self.config.BOT_USERNAME,
+            heading='🔞 <b>18+ Search Results</b>'
         )
+
+        try:
+            await query.edit_message_text(
+                result_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard
+            )
+
+        except TelegramError as exc:
+            logging.info("18+ search results edit skipped: %s", exc)
 
         if query.message:
             self.db.add_message(

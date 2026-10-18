@@ -81,9 +81,8 @@ class Keyboards:
 
             rows.append([
                 InlineKeyboardButton(
-                    text=(
-                        f"🎬 {movie['title']} "
-                        f"• {size_text}"
+                    text=cls.button_label(
+                        f"{size_text} - {movie['title']}"
                     ),
                     url=(
                         f"https://t.me/{username}"
@@ -93,6 +92,96 @@ class Keyboards:
             ])
 
         return InlineKeyboardMarkup(rows)
+
+    @staticmethod
+    def button_label(text, limit=64):
+        """Keep labels inside Telegram's 64 byte button limit."""
+        label = " ".join((text or "").split())
+
+        while len(label.encode("utf-8")) > limit:
+            label = label[:-1].rstrip()
+
+        return label
+
+    @staticmethod
+    def paginates(total_pages: int, query: str) -> bool:
+        """Whether page buttons can carry this search text.
+
+        The query travels inside callback_data, which Telegram caps at 64
+        bytes, so a very long search stays on a single page.
+        """
+        if total_pages <= 1:
+            return False
+
+        return len(f"sp{total_pages}|{query}".encode("utf-8")) <= 64
+
+    @classmethod
+    def search_pages(
+        cls,
+        page: int,
+        total_pages: int,
+        query: str
+    ):
+        """Number buttons for a group search result message."""
+        if not cls.paginates(total_pages, query):
+            return None
+
+        numbers = [
+            InlineKeyboardButton(
+                text=(
+                    f"[{candidate}]"
+                    if candidate == page
+                    else str(candidate)
+                ),
+                callback_data=f"sp{candidate}|{query}"
+            )
+            for candidate in range(1, min(total_pages, 10) + 1)
+        ]
+
+        rows = [numbers]
+
+        movers = []
+
+        if page > 1:
+            movers.append(
+                InlineKeyboardButton(
+                    text="◀️ Prev",
+                    callback_data=f"sp{page - 1}|{query}"
+                )
+            )
+
+        if page < total_pages:
+            movers.append(
+                InlineKeyboardButton(
+                    text="Next ▶️",
+                    callback_data=f"sp{page + 1}|{query}"
+                )
+            )
+
+        if movers:
+            rows.append(movers)
+
+        return InlineKeyboardMarkup(rows)
+
+    @classmethod
+    def search_results_keyboard(
+        cls,
+        movies,
+        bot_username: str,
+        page: int,
+        total_pages: int,
+        query: str
+    ):
+        keyboard = cls.movie_buttons(movies, bot_username)
+        pages = cls.search_pages(page, total_pages, query)
+
+        if pages is None:
+            return keyboard
+
+        return InlineKeyboardMarkup(
+            list(keyboard.inline_keyboard)
+            + list(pages.inline_keyboard)
+        )
 
     @staticmethod
     def movie_button(movie_id: int):
