@@ -209,11 +209,43 @@ SEARCH RESULTS DISPLAY
 
 GROUP MESSAGE TIMER
 - GROUP_MESSAGE_INTERVAL (default 60) is the number of seconds a member must
-  wait between messages in the group. Admins are exempt, 0 turns it off.
+  wait between messages in the group. It applies to everyone, admins included.
+  Messages starting with / are exempt so an admin can always run a command.
+  0 turns the timer off.
 - The bot deletes the too-early message and posts a notice naming the user with
   the seconds left; the notice deletes itself.
 - Telegram gives bots no way to draw a countdown inside the member's typing
   box, so the wait is shown as that self-deleting notice instead.
+
+GROUP RULES (Cinema Kingdom 3.0)
+- Attachments: with GROUP_BLOCK_ATTACHMENTS=true (default) any file, video,
+  music, voice note, photo, animation or sticker a member sends is deleted.
+  Admins are exempt so they can post posters.
+- The same setting is also written into Telegram itself on every bot start
+  (core.py apply_group_privacy): members keep text only, lose polls, inline
+  bots, web page previews, invites, pins and topic management. For this to
+  take effect the bot must be a group admin with "Manage Group".
+- Links: http(s)://, www., t.me/ and telegram.me/ are removed, and so is a
+  @username that belongs to a real channel or group. Plain @name talk is fine.
+- Repeat offenders: every violation adds a strike valid for
+  GROUP_OFFENCE_WINDOW seconds (default 1 day). The first GROUP_BAN_STRIKES-1
+  violations (default 1) remove the member, who may rejoin; at GROUP_BAN_STRIKES
+  the ban stays and the member is listed in Banned until /unban.
+- GROUP_BAN_STRIKES=1 bans on the first violation.
+- /unban UserID lifts the ban and clears that user's strikes. Telegram does not
+  let a bot re-add a member, so the user must join again with your invite link.
+- Admins are not affected by the attachment or link rules, only by the timer.
+
+WHAT TELEGRAM DOES NOT ALLOW
+- Hiding a group's member list from members. Only "Restrict New Members" in
+  the group's own Permissions screen stops a *newly joined* user from reading
+  history and members until an admin approves them — do that in Telegram:
+  group -> Edit -> Permissions.
+- Removing the group's public invite link without breaking the
+  https://t.me/cinema_kingdom_vault1 buttons the bot shows on Join prompts and
+  promotions. The bot deletes any group link a member posts instead.
+- Making the group Private would take it off the search page and stop users
+  reaching it from the bot, so it stays Public with the rules above.
 
 FEATURES
 - Promotional join message runs every PROMO_INTERVAL seconds (minimum 120).
@@ -271,6 +303,7 @@ UPLOADER NAMES AND FILE CAPTION
 - Storage uploads remember who uploaded the file, and the download page plus
   Movie Details show "Uploaded by: @name".
 - The delivered file caption carries the title, FILE_CAPTION_NOTE and links to
-  GROUP_NAME/GROUP_USERNAME, CHANNEL_NAME/CHANNEL_USERNAME and
-  SUPER_ADMIN_USERNAME. Leaving one blank drops only that line.
+  GROUP_NAME/GROUP_USERNAME and CHANNEL_NAME/CHANNEL_USERNAME. Leaving one
+  blank drops only that line. No admin username is printed there; SUPER_ADMIN_
+  USERNAME is only used in the group welcome message.
 - MyStorage is never linked in these messages, it stays private.

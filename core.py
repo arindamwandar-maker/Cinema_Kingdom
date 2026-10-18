@@ -4,6 +4,7 @@ from telegram import (
     BotCommand,
     BotCommandScopeAllChatAdministrators,
     BotCommandScopeChat,
+    ChatPermissions,
 )
 from telegram.ext import (
     Application,
@@ -58,7 +59,7 @@ class CinemaKingdomCore:
         self.application = (
             Application.builder()
             .token(self.config.BOT_TOKEN)
-            .post_init(self.register_command_menu)
+            .post_init(self.prepare_bot)
             .build()
         )
 
@@ -141,6 +142,7 @@ class CinemaKingdomCore:
         BotCommand("sendchannel", "Post in the channel"),
         BotCommand("sendboth", "Post in the group and the channel"),
         BotCommand("admins", "List bot admins"),
+        BotCommand("unban", "Let a banned member back in: /unban UserID"),
         BotCommand("addadmin", "Add an admin: /addadmin UserID"),
         BotCommand("removeadmin", "Remove an admin: /removeadmin UserID"),
         BotCommand("sheettest", "Test the Google Sheet connection"),
@@ -154,6 +156,52 @@ class CinemaKingdomCore:
         BotCommand("stats", "Bot statistics"),
         BotCommand("syncnames", "Apply names edited in the Google Sheet"),
     ]
+
+    async def prepare_bot(self, application):
+        """Startup work every boot path has to run."""
+        await self.register_command_menu(application)
+        await self.apply_group_privacy(application)
+
+    async def apply_group_privacy(self, application):
+        """Lock the group down: text only, no invites, no pinning.
+
+        Telegram then refuses the attachment or the invite itself, so nothing
+        leaks before the bot gets a chance to delete it. Needs the bot to be a
+        group admin with Manage Group.
+        """
+        attachments = not self.config.GROUP_BLOCK_ATTACHMENTS
+
+        permissions = ChatPermissions(
+            can_send_messages=True,
+            can_send_audios=attachments,
+            can_send_documents=attachments,
+            can_send_photos=attachments,
+            can_send_videos=attachments,
+            can_send_video_notes=attachments,
+            can_send_voice_notes=attachments,
+            can_send_other_messages=attachments,
+            can_send_polls=False,
+            can_add_web_page_previews=False,
+            can_change_info=False,
+            can_invite_users=False,
+            can_pin_messages=False,
+            can_manage_topics=False,
+        )
+
+        try:
+            await application.bot.set_chat_permissions(
+                self.config.GROUP_ID,
+                permissions
+            )
+            logging.info('Group privacy permissions applied')
+
+        except Exception as exc:
+            logging.warning(
+                'Group permissions not applied - the bot needs to be an admin '
+                'of %s with Manage Group: %s',
+                self.config.GROUP_ID,
+                exc
+            )
 
     async def register_command_menu(self, application):
         """Fill Telegram's / suggestion list.
@@ -326,6 +374,13 @@ class CinemaKingdomCore:
             CommandHandler(
                 "admins",
                 self.admin_handler.list_admins
+            )
+        )
+
+        app.add_handler(
+            CommandHandler(
+                "unban",
+                self.admin_handler.unban_user
             )
         )
 

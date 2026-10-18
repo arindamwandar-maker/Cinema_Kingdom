@@ -19,14 +19,17 @@ on:
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
       - name: Run due jobs
         env:
           TICK_URL: https://arindam2109.pythonanywhere.com/tick
           KEEP_ALIVE_TOKEN: ${{ secrets.KEEP_ALIVE_TOKEN }}
         run: |
+          # A sleeping free web app needs about a minute to boot, so allow for
+          # the slow first response and retry instead of skipping the hour.
           curl --fail-with-body --silent --show-error \
-            --max-time 40 \
+            --max-time 120 \
+            --retry 3 --retry-delay 15 --retry-all-errors \
             -H "X-Keep-Alive-Token: $KEEP_ALIVE_TOKEN" \
             "$TICK_URL"

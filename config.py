@@ -215,12 +215,39 @@ class Config:
         )
     )
 
-    # Seconds a member must wait between messages in the group.
+    # Seconds a member must wait between messages in the group. Applies to
+    # everyone, admins included; /commands are exempt.
     GROUP_MESSAGE_INTERVAL = max(
         0,
         _safe_int(
             os.getenv("GROUP_MESSAGE_INTERVAL"),
             60
+        )
+    )
+
+    # Delete any file, video, music, photo or sticker a member sends in the
+    # group. Admins are exempt so they can post posters.
+    GROUP_BLOCK_ATTACHMENTS = os.getenv(
+        "GROUP_BLOCK_ATTACHMENTS",
+        "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+
+    # Violations a member collects inside GROUP_OFFENCE_WINDOW before the bot
+    # bans them instead of only deleting the message. 1 = ban at once.
+    GROUP_BAN_STRIKES = max(
+        1,
+        _safe_int(
+            os.getenv("GROUP_BAN_STRIKES"),
+            2
+        )
+    )
+
+    # Seconds a violation counts towards the next one.
+    GROUP_OFFENCE_WINDOW = max(
+        60,
+        _safe_int(
+            os.getenv("GROUP_OFFENCE_WINDOW"),
+            86400
         )
     )
 

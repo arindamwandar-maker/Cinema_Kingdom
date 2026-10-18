@@ -347,6 +347,36 @@ class AdminHandler:
         )
         await message.reply_text(text, parse_mode=ParseMode.HTML)
 
+    async def unban_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Undo a group ban handed out by the moderation rules."""
+        user, message = update.effective_user, update.effective_message
+        if not user or not message or not self.is_admin(user.id):
+            return
+        if not context.args:
+            await message.reply_text('Usage: <code>/unban UserID</code>', parse_mode=ParseMode.HTML)
+            return
+        try:
+            target = int(context.args[0])
+        except ValueError:
+            await message.reply_text('❌ Invalid user ID.')
+            return
+        try:
+            await context.bot.unban_chat_member(self.config.GROUP_ID, target, only_if_banned=True)
+        except Exception as exc:
+            await message.reply_text(
+                f'❌ Could not unban <code>{target}</code>: {html.escape(str(exc))}',
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        self.db.clear_offenses(target)
+        await message.reply_text(
+            f'✅ <code>{target}</code> is allowed in {html.escape(self.config.GROUP_NAME)} again '
+            'and their violations are cleared.\n'
+            '⚠️ They have to rejoin the group themselves, and only members may invite them '
+            'while group invites are locked.',
+            parse_mode=ParseMode.HTML,
+        )
+
     async def sheet_test(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user, message = update.effective_user, update.effective_message
         if not user or not message or not self.is_admin(user.id):

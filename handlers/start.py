@@ -42,7 +42,6 @@ class StartHandler:
         for line in (
             self.link_line('👥', self.config.GROUP_USERNAME, self.config.GROUP_NAME),
             self.link_line('📢', self.config.CHANNEL_USERNAME, self.config.CHANNEL_NAME),
-            self.link_line('👑', self.config.SUPER_ADMIN_USERNAME, self.config.SUPER_ADMIN_USERNAME, prefix='Admin: @'),
         ):
             if line:
                 lines.append(line)

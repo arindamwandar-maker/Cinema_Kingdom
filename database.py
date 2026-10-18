@@ -66,6 +66,9 @@ class Database:
         cur.execute('''CREATE TABLE IF NOT EXISTS group_timers(
             user_id INTEGER PRIMARY KEY, last_message TEXT
         )''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS group_offenses(
+            user_id INTEGER PRIMARY KEY, off_count INTEGER DEFAULT 0, last_offense TEXT
+        )''')
         cur.execute('''CREATE TABLE IF NOT EXISTS messages(
             id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, message_id INTEGER,
             movie_id INTEGER, expire_time TEXT, UNIQUE(chat_id, message_id)
@@ -325,6 +328,29 @@ class Database:
             return 0
         elapsed = (datetime.now() - datetime.fromisoformat(row['last_message'])).total_seconds()
         return max(0, seconds - int(elapsed))
+
+    def add_offense(self, user_id: int, window_seconds: int = 86400) -> int:
+        """Count a group violation and return how many the user now has."""
+        now = datetime.now()
+        row = self.conn.execute(
+            'SELECT off_count, last_offense FROM group_offenses WHERE user_id=?', (user_id,)
+        ).fetchone()
+
+        if row and now - datetime.fromisoformat(row['last_offense']) < timedelta(seconds=window_seconds):
+            count = (row['off_count'] or 0) + 1
+        else:
+            count = 1
+
+        self.conn.execute(
+            'INSERT OR REPLACE INTO group_offenses(user_id, off_count, last_offense) VALUES(?,?,?)',
+            (user_id, count, now.isoformat())
+        )
+        self.conn.commit()
+        return count
+
+    def clear_offenses(self, user_id: int):
+        self.conn.execute('DELETE FROM group_offenses WHERE user_id=?', (user_id,))
+        self.conn.commit()
 
     def add_message(self, chat_id: int, message_id: int, movie_id=None, seconds: int = 300):
         expire = datetime.now() + timedelta(seconds=seconds)

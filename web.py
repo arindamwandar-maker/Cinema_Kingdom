@@ -95,8 +95,8 @@ class _WebhookRunner:
             await core.application.start()
 
             # PTB only runs post_init from run_polling/run_webhook, so this
-            # startup path sets the / command menu by hand.
-            await core.register_command_menu(core.application)
+            # startup path applies the / command menus and group rules by hand.
+            await core.prepare_bot(core.application)
 
             self.core = core
             self.jobs = JobRunner(core)
