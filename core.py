@@ -23,7 +23,9 @@ from handlers.request import RequestHandler
 from handlers.search import SearchHandler
 from handlers.start import StartHandler
 from handlers.storage_handler import StorageHandler
+from handlers.welcome import WelcomeHandler
 from services.auto_delete import AutoDeleteService
+from services.community import CommunityService
 from services.promotion import PromotionService
 from services.sheet_sync import SheetSyncService
 
@@ -103,6 +105,16 @@ class CinemaKingdomCore:
         )
 
         self.moderation_handler = ModerationHandler(
+            self.db,
+            self.config
+        )
+
+        self.welcome_handler = WelcomeHandler(
+            self.db,
+            self.config
+        )
+
+        self.community = CommunityService(
             self.db,
             self.config
         )
@@ -416,6 +428,17 @@ class CinemaKingdomCore:
         # =========================
         # GROUP MODERATION
         # =========================
+
+        app.add_handler(
+            MessageHandler(
+                filters.Chat(
+                    self.config.GROUP_ID
+                )
+                & filters.StatusUpdate.NEW_CHAT_MEMBERS,
+                self.welcome_handler.handle_join
+            ),
+            group=0
+        )
 
         app.add_handler(
             MessageHandler(

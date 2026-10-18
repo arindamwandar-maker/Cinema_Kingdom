@@ -22,6 +22,36 @@ class StartHandler:
         self.token_manager = TokenManager(db)
         self.sheet = GoogleSheetService(config)
 
+    def link_line(self, emoji: str, username: str, label: str, prefix: str = ''):
+        if not username:
+            return None
+        return (
+            f'{emoji} <a href="https://t.me/{username}">'
+            f'{prefix}{html.escape(label)}</a>'
+        )
+
+    def delivery_caption(self, title: str) -> str:
+        """Caption shipped with the movie file: title, note and our links."""
+        lines = [
+            f'🎬 <b>{html.escape(title)}</b>',
+            '',
+            '✅ File delivered. Enjoy watching!',
+            '',
+        ]
+
+        for line in (
+            self.link_line('👥', self.config.GROUP_USERNAME, self.config.GROUP_NAME),
+            self.link_line('📢', self.config.CHANNEL_USERNAME, self.config.CHANNEL_NAME),
+            self.link_line('👑', self.config.SUPER_ADMIN_USERNAME, self.config.SUPER_ADMIN_USERNAME, prefix='Admin: @'),
+        ):
+            if line:
+                lines.append(line)
+
+        if self.config.FILE_CAPTION_NOTE:
+            lines.extend(['', html.escape(self.config.FILE_CAPTION_NOTE)])
+
+        return '\n'.join(lines)
+
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.effective_message
         user = update.effective_user
@@ -101,7 +131,7 @@ class StartHandler:
             )
             sent = await message.reply_document(
                 document=movie['file_id'],
-                caption=f"🎬 <b>{html.escape(movie['title'])}</b>\n\n✅ File delivered. Enjoy watching!",
+                caption=self.delivery_caption(movie['title']),
                 parse_mode=ParseMode.HTML,
             )
             self.db.add_message(sent.chat.id, sent.message_id, movie_id, self.config.AUTO_DELETE_TIME)
@@ -147,8 +177,22 @@ class StartHandler:
         message = update.effective_message
         if not message:
             return
+
+        lines = [f"🎬 <b>{html.escape(movie['title'])}</b>", '']
+        uploader = (movie.get('uploaded_by_name') or '').strip()
+
+        if uploader:
+            lines.append(f'📤 Uploaded by: {html.escape(uploader)}')
+
+        lines.extend([
+            '',
+            'Click below to generate the download link.',
+            '',
+            '⏳ Link validity: 5 minutes.',
+        ])
+
         sent = await message.reply_text(
-            f"🎬 <b>{html.escape(movie['title'])}</b>\n\nClick below to generate the download link.\n\n⏳ Link validity: 5 minutes.",
+            '\n'.join(lines),
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.movie_button(movie['id']),
         )

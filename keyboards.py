@@ -291,6 +291,22 @@ class Keyboards:
             ]
         ])
 
+    @classmethod
+    def request_reminder(cls, requests):
+        rows = []
+
+        for request in requests:
+            rows.append([
+                InlineKeyboardButton(
+                    text=cls.button_label(
+                        f"✅ Solved — {request['movie_title']}"
+                    ),
+                    callback_data=f"solved_{request['id']}"
+                )
+            ])
+
+        return InlineKeyboardMarkup(rows)
+
     @staticmethod
     def adult_confirmation():
         return InlineKeyboardMarkup([

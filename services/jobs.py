@@ -99,6 +99,8 @@ class JobRunner:
             ("cleanup", self.core.auto_delete.cleanup, CLEANUP_INTERVAL),
             ("sheet_sync", self.core.sheet_sync.sync_movie_names, self.config.SHEET_SYNC_INTERVAL),
             ("promotion", self.core.promotion.send_promotion, self.config.PROMO_INTERVAL),
+            ("request_reminder", self.core.community.send_request_reminders, self.config.REQUEST_REMINDER_INTERVAL),
+            ("group_members", self.core.community.sync_group_members, self.config.MEMBER_SHEET_INTERVAL),
         )
 
     def due_jobs(self):
@@ -130,7 +132,7 @@ class JobRunner:
                     await method(self.context)
 
                 except Exception as exc:
-                    # A failing job must not stop the other two.
+                    # A failing job must not stop the others.
                     logging.exception("%s failed: %s", name, exc)
 
                 # Recorded even on failure, so a permanently broken job does

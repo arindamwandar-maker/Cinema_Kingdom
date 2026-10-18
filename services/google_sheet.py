@@ -42,6 +42,28 @@ class GoogleSheetService:
         'Last Synced Name',
     ]
 
+    REQUEST_HEADERS = [
+        'Request ID',
+        'User ID',
+        'Username',
+        'Name',
+        'Movie Name',
+        'Request Time',
+        'Status',
+        'Solved By',
+        'Solved Time',
+    ]
+
+    MEMBER_HEADERS = [
+        'User ID',
+        'Username',
+        'Name',
+        'Role',
+        'Join Date',
+        'Last Active',
+        'Total Requests',
+    ]
+
     def __init__(self, config):
         self.config = config
         self.spreadsheet = None
@@ -131,10 +153,7 @@ class GoogleSheetService:
         return output or 'A'
 
     def add_request(self, request_id, user_id, username, first_name, movie_name, request_time):
-        worksheet = self.get_or_create_worksheet(
-            'Movie Requests',
-            ['Request ID', 'User ID', 'Username', 'Name', 'Movie Name', 'Request Time'],
-        )
+        worksheet = self.get_or_create_worksheet('Movie Requests', self.REQUEST_HEADERS)
         if worksheet is None:
             return False
 
@@ -147,6 +166,9 @@ class GoogleSheetService:
                     first_name or '',
                     movie_name or '',
                     request_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'Pending',
+                    '',
+                    '',
                 ],
                 value_input_option='USER_ENTERED',
             )
@@ -154,6 +176,52 @@ class GoogleSheetService:
         except Exception as exc:
             logging.exception('Movie request sheet error: %s', exc)
             return False
+
+    def mark_request_solved(self, request_id, solved_by, solved_time) -> bool:
+        """Set the Status of a Movie Requests row to Solved."""
+        worksheet = self.get_or_create_worksheet('Movie Requests', self.REQUEST_HEADERS)
+        if worksheet is None:
+            return False
+
+        try:
+            for row_number, stored_id in enumerate(worksheet.col_values(1), start=1):
+                if row_number > 1 and str(stored_id).strip() == str(request_id):
+                    worksheet.update(
+                        range_name=f'G{row_number}:I{row_number}',
+                        values=[['Solved', solved_by or '', solved_time or '']],
+                    )
+                    return True
+            return False
+        except Exception as exc:
+            logging.exception('Movie request solve update error: %s', exc)
+            return False
+
+    def add_group_members(self, members) -> int:
+        """Append Group Members rows nobody has written yet.
+
+        The bot cannot read a group's member list from Telegram, so this sheet
+        grows from the joins and requests the bot actually sees.
+        """
+        worksheet = self.get_or_create_worksheet('Group Members', self.MEMBER_HEADERS)
+        if worksheet is None:
+            return 0
+
+        try:
+            known = {str(value).strip() for value in worksheet.col_values(1)}
+            added = 0
+
+            for row in members:
+                user_id = str(row[0]).strip()
+                if not user_id or user_id in known:
+                    continue
+                worksheet.append_row(list(row), value_input_option='USER_ENTERED')
+                known.add(user_id)
+                added += 1
+
+            return added
+        except Exception as exc:
+            logging.exception('Group Members sheet error: %s', exc)
+            return 0
 
     def add_storage_upload(
         self,

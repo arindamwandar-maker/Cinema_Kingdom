@@ -12,6 +12,7 @@ from config import Config
 from database import Database
 from keyboards import Keyboards
 from handlers.search import render_search_results
+from services.community import render_request_reminder
 from services.force_join import ForceJoinService
 from services.google_sheet import GoogleSheetService
 from services.shortener import ShortenerService
@@ -192,6 +193,20 @@ class CallbackHandler:
         if data.startswith("sp"):
 
             await self.change_search_page(
+                query,
+                context,
+                data
+            )
+
+            return
+
+        # =========================
+        # Solve a movie request
+        # =========================
+
+        if data.startswith("solved_"):
+
+            await self.solve_request(
                 query,
                 context,
                 data
@@ -393,6 +408,123 @@ class CallbackHandler:
             # stale button on a message the cleanup already deleted.
             logging.info("Search page edit skipped: %s", exc)
 
+    async def solve_request(
+        self,
+        query,
+        context,
+        data: str
+    ):
+        """Mark a pending movie request as solved from the admin reminder."""
+        user = query.from_user
+
+        if not user or not self.db.is_admin(
+            user.id,
+            self.config.ADMIN_IDS
+        ):
+            await query.answer(
+                "Only bot admins can solve requests.",
+                show_alert=True
+            )
+
+            return
+
+        try:
+            request_id = int(data.split("_", 1)[1])
+        except (ValueError, IndexError):
+            await query.answer(
+                "This button is out of date.",
+                show_alert=True
+            )
+
+            return
+
+        request = self.db.get_request(request_id)
+
+        if not request:
+            await query.answer(
+                "This request is not in the bot.",
+                show_alert=True
+            )
+
+            return
+
+        if request["status"] != "pending":
+            await query.answer(
+                "This request is already solved.",
+                show_alert=True
+            )
+
+            return
+
+        solved_time = datetime.now(
+            ZoneInfo(self.config.LOCAL_TIMEZONE)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+
+        self.db.complete_request(
+            request_id,
+            user.id
+        )
+
+        sheet_ok = self.sheet.mark_request_solved(
+            request_id,
+            f"@{user.username}" if user.username else str(user.id),
+            solved_time
+        )
+
+        remaining = self.db.get_pending_requests()
+
+        if query.message:
+            if remaining:
+                text, keyboard = render_request_reminder(remaining)
+            else:
+                text = (
+                    "✅ <b>All movie requests are solved</b>\n\n"
+                    "Nobody is waiting for a movie right now."
+                )
+                keyboard = None
+
+            try:
+                await query.edit_message_text(
+                    text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=keyboard
+                )
+
+            except TelegramError as exc:
+                logging.info(
+                    "Request reminder edit skipped: %s",
+                    exc
+                )
+
+        await query.answer(
+            "Solved ✅"
+            if sheet_ok
+            else "Solved in the bot, but the Google Sheet row was not found."
+        )
+
+        requester_id = request.get("user_id")
+
+        if requester_id:
+            try:
+                await context.bot.send_message(
+                    chat_id=requester_id,
+                    text=(
+                        "✅ <b>Your request is solved</b>\n\n"
+                        f"🎥 <b>{html.escape(request['movie_title'])}</b>\n\n"
+                        "Search it in the group: "
+                        f"<code>{html.escape(request['movie_title'])}</code>"
+                    ),
+                    parse_mode=ParseMode.HTML
+                )
+
+            except Exception as exc:
+                # A user who never opened the bot cannot be messaged.
+                logging.info(
+                    "Could not notify requester %s: %s",
+                    requester_id,
+                    exc
+                )
+
     async def _send_adult_search_results(
         self,
         query,
@@ -470,17 +602,21 @@ class CallbackHandler:
             or movie
         )
 
-        text = (
-            "🎬 <b>Movie Information</b>\n\n"
-            f"<b>Title:</b> "
-            f"{html.escape(updated_movie['title'])}\n"
-            f"<b>Size:</b> "
-            f"{self.format_size(updated_movie.get('file_size'))}\n"
-            f"<b>Views:</b> "
-            f"{updated_movie.get('views', 0)}\n"
-            f"<b>Downloads:</b> "
-            f"{updated_movie.get('downloads', 0)}"
-        )
+        lines = [
+            "🎬 <b>Movie Information</b>",
+            "",
+            f"<b>Title:</b> {html.escape(updated_movie['title'])}",
+            f"<b>Size:</b> {self.format_size(updated_movie.get('file_size'))}",
+            f"<b>Views:</b> {updated_movie.get('views', 0)}",
+            f"<b>Downloads:</b> {updated_movie.get('downloads', 0)}",
+        ]
+
+        uploader = (updated_movie.get('uploaded_by_name') or '').strip()
+
+        if uploader:
+            lines.append(f"<b>Uploaded by:</b> {html.escape(uploader)}")
+
+        text = '\n'.join(lines)
 
         await query.edit_message_text(
             text,

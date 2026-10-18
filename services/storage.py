@@ -107,6 +107,7 @@ class StorageService:
             tags=payload['movie_title'].lower(),
             source_chat_id=payload['source_chat_id'],
             source_message_id=payload['source_message_id'],
+            uploaded_by_name=payload['uploader'],
         )
 
         upload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

@@ -44,6 +44,7 @@ class Database:
             'status': "TEXT DEFAULT 'active'",
             'deleted_at': 'TEXT',
             'deleted_by': 'INTEGER',
+            'uploaded_by_name': "TEXT DEFAULT ''",
         }
         for name, sql_type in migrations.items():
             if name not in cols:
@@ -119,14 +120,14 @@ class Database:
             return True
         return self.conn.execute('SELECT 1 FROM bot_admins WHERE user_id=?', (user_id,)).fetchone() is not None
 
-    def add_movie(self, title, description, file_id, file_size=0, uploaded_by=0, tags='', source_chat_id=None, source_message_id=None) -> int:
+    def add_movie(self, title, description, file_id, file_size=0, uploaded_by=0, tags='', source_chat_id=None, source_message_id=None, uploaded_by_name='') -> int:
         cur = self.conn.cursor()
         cur.execute('''
         INSERT INTO movies(title, description, file_id, file_size, upload_date, uploaded_by,
-                           tags, source_chat_id, source_message_id, status)
-        VALUES(?,?,?,?,?,?,?,?,?,'active')
+                           uploaded_by_name, tags, source_chat_id, source_message_id, status)
+        VALUES(?,?,?,?,?,?,?,?,?,?,'active')
         ''', (title, description, file_id, file_size or 0, datetime.now().isoformat(), uploaded_by,
-              tags, source_chat_id, source_message_id))
+              uploaded_by_name, tags, source_chat_id, source_message_id))
         self.conn.commit()
         return cur.lastrowid
 
@@ -152,9 +153,17 @@ class Database:
 
     def get_movie(self, movie_id: int, include_deleted: bool = False) -> Optional[Dict]:
         sql = '''
-            SELECT id, title, description, file_id, file_size, views, downloads,
-                   source_chat_id, source_message_id, status, deleted_at, deleted_by
-            FROM movies WHERE id=?
+            SELECT m.id, m.title, m.description, m.file_id, m.file_size, m.views,
+                   m.downloads, m.uploaded_by, m.source_chat_id,
+                   m.source_message_id, m.status, m.deleted_at, m.deleted_by,
+                   COALESCE(
+                       NULLIF(TRIM(m.uploaded_by_name), ''),
+                       '@' || NULLIF(TRIM(u.username), ''),
+                       ''
+                   ) AS uploaded_by_name
+            FROM movies m
+            LEFT JOIN users u ON m.uploaded_by=u.user_id
+            WHERE m.id=?
         '''
         params = [movie_id]
         if not include_deleted:
@@ -254,6 +263,32 @@ class Database:
                    u.username, u.first_name
             FROM requests r LEFT JOIN users u ON r.user_id=u.user_id
             WHERE r.status='pending' ORDER BY r.request_date DESC
+        ''').fetchall()
+        return [dict(row) for row in rows]
+
+    def get_request(self, request_id: int) -> Optional[Dict]:
+        row = self.conn.execute('''
+            SELECT r.id, r.user_id, r.movie_title, r.status, r.request_date,
+                   u.username, u.first_name
+            FROM requests r LEFT JOIN users u ON r.user_id=u.user_id
+            WHERE r.id=?
+        ''', (request_id,)).fetchone()
+        return dict(row) if row else None
+
+    def complete_request(self, request_id: int, solved_by: int = 0) -> bool:
+        cur = self.conn.cursor()
+        cur.execute('''
+            UPDATE requests SET status='completed', completed_date=?, notes=?
+            WHERE id=? AND status='pending'
+        ''', (datetime.now().isoformat(), f'Solved by admin {solved_by}', request_id))
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    def get_users(self) -> List[Dict]:
+        rows = self.conn.execute('''
+            SELECT user_id, username, first_name, last_name, join_date,
+                   last_active, total_requests
+            FROM users ORDER BY user_id
         ''').fetchall()
         return [dict(row) for row in rows]
 

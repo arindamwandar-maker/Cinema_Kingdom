@@ -86,6 +86,24 @@ class Config:
         "mystoragecinema"
     ).strip().replace("@", "")
 
+    # Display names shown in the group welcome message and the file caption.
+    GROUP_NAME = os.getenv(
+        "GROUP_NAME",
+        "Cinema Kingdom 3.0"
+    ).strip()
+
+    CHANNEL_NAME = os.getenv(
+        "CHANNEL_NAME",
+        "Cinema Kingdom Community"
+    ).strip()
+
+    # Your own @username. It is printed as the super admin contact wherever a
+    # message has one; leave it blank and those lines disappear.
+    SUPER_ADMIN_USERNAME = os.getenv(
+        "SUPER_ADMIN_USERNAME",
+        ""
+    ).strip().replace("@", "")
+
     # =========================
     # Ad-link shortener (Shrinkme, GPLinks - same API shape)
     # =========================
@@ -206,6 +224,24 @@ class Config:
         )
     )
 
+    # How often the pending movie request list is sent to the admins.
+    REQUEST_REMINDER_INTERVAL = max(
+        300,
+        _safe_int(
+            os.getenv("REQUEST_REMINDER_INTERVAL"),
+            3600
+        )
+    )
+
+    # How often joined members are written to the Group Members worksheet.
+    MEMBER_SHEET_INTERVAL = max(
+        300,
+        _safe_int(
+            os.getenv("MEMBER_SHEET_INTERVAL"),
+            3600
+        )
+    )
+
     MAX_MOVIES_PER_SEARCH = max(
         1,
         _safe_int(
@@ -282,6 +318,21 @@ Choose an option using the buttons below.
 
 ⏳ Download links, movie files and temporary messages are removed after 5 minutes.
 """
+
+    GROUP_WELCOME_MSG = """Hi {first_name} 👋
+
+Welcome To {group_name}
+Here you can download your favourite movies."""
+
+    # Shown under the welcome message only when SUPER_ADMIN_USERNAME is set,
+    # so the bot never prints an empty @.
+    GROUP_WELCOME_ADMIN_LINE = "👑 Want to work with us? Pin @{admin_username}"
+
+    # Printed on every delivered movie file, above the group links.
+    FILE_CAPTION_NOTE = os.getenv(
+        "FILE_CAPTION_NOTE",
+        "📝 Daily movie uploads and requests in our group. Join and stay tuned!"
+    ).strip()
 
     HELP_MSG = """
 📖 <b>Cinema Kingdom Help</b>

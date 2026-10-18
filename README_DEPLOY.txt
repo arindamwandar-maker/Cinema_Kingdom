@@ -150,7 +150,8 @@ GOOGLE SHEET
 - Set GOOGLE_SHEET_URL.
 - Recommended: base64 encode the whole credentials JSON and set
   GOOGLE_CREDENTIALS_BASE64.
-- The bot creates/uses worksheets named Movie Requests and Storage Uploads.
+- The bot creates/uses worksheets named Movie Requests, Storage Uploads,
+  Link Clicks, movie download status and Group Members.
 - Test with /sheettest as an admin.
 - See GOOGLE SHEET MOVIE NAME SYNC below for renaming movies from the sheet.
 
@@ -239,3 +240,37 @@ LINK TRACKING
   Asia/Kolkata.
 - GPLinks external page clicks cannot be known exactly without a GPLinks
   webhook/reporting API; the bot records generation and delivery events.
+
+MOVIE REQUEST REMINDERS
+- Every REQUEST_REMINDER_INTERVAL seconds (default 3600 = 1 hour) the bot
+  private-messages every bot admin the list of pending movie requests.
+- Each request has a ✅ Solved button. Pressing it marks the request solved in
+  the bot, writes Status / Solved By / Solved Time on that row of the Movie
+  Requests worksheet, updates the list in that message and tells the user who
+  asked for the movie.
+- Nothing is sent when nobody is waiting for a movie.
+
+GROUP MEMBERS WORKSHEET
+- One row per user the bot knows: User ID, Username, Name, Role (Super Admin /
+  Admin / Member), Join Date, Last Active, Total Requests.
+- Rows are appended only, never rewritten, so you can add your own columns.
+- Telegram does not let a bot read a group's member list, so this sheet grows
+  from group joins and from anyone who uses the bot.
+- Runs every MEMBER_SHEET_INTERVAL seconds (default 3600).
+
+GROUP WELCOME MESSAGE
+- A new group member is greeted in the group with GROUP_WELCOME_MSG, which
+  names them, shows GROUP_NAME and adds the pin line with SUPER_ADMIN_USERNAME
+  when you have filled that in.
+- The bot only receives join notifications when it reads all group messages:
+  BotFather -> /setprivacy -> Disable, or make the bot a group admin.
+- The greeting also records the member, which is how they reach the
+  Group Members worksheet.
+
+UPLOADER NAMES AND FILE CAPTION
+- Storage uploads remember who uploaded the file, and the download page plus
+  Movie Details show "Uploaded by: @name".
+- The delivered file caption carries the title, FILE_CAPTION_NOTE and links to
+  GROUP_NAME/GROUP_USERNAME, CHANNEL_NAME/CHANNEL_USERNAME and
+  SUPER_ADMIN_USERNAME. Leaving one blank drops only that line.
+- MyStorage is never linked in these messages, it stays private.
