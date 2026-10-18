@@ -220,6 +220,75 @@ class AdminHandler:
         else:
             await message.reply_text('❌ Restore failed.')
 
+    async def rename_movie(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message, chat, user = update.effective_message, update.effective_chat, update.effective_user
+        if not message or not chat:
+            return
+
+        if chat.id != self.config.STORAGE_CHANNEL:
+            await message.reply_text(
+                '❌ Use this command only in MyStorage: <code>/rn MovieID New Name</code>',
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        # In a channel post Telegram may not provide effective_user. The private
+        # storage channel itself is the gate.
+        if user and not self.is_admin(user.id):
+            await message.reply_text('❌ Only bot admins can rename movies.')
+            return
+
+        parts = (message.text or message.caption or '').strip().split(None, 2)
+        if len(parts) < 3:
+            await message.reply_text(
+                'Usage: <code>/rn 12 Movie Name</code>',
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        try:
+            movie_id = int(parts[1])
+        except ValueError:
+            await message.reply_text('❌ Movie ID must be a number.')
+            return
+
+        new_name = parts[2].strip()[:200]
+        movie = self.db.get_movie(movie_id)
+
+        if not movie:
+            await message.reply_text(
+                f'❌ No active movie with ID <code>{movie_id}</code>. '
+                'Check the Movie ID column in the Storage Uploads sheet, '
+                'or restore a deleted movie with /rst.',
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        if not self.db.update_movie_title(movie_id, new_name):
+            await message.reply_text('❌ Rename failed.')
+            return
+
+        caption_updated = False
+
+        if self.sheet_sync is not None:
+            caption_updated = await self.sheet_sync.sync_caption(context, movie, new_name)
+
+        sheet_ok = self.sheet.set_storage_movie_name(movie_id, new_name)
+
+        text = (
+            '✏️ <b>Movie Renamed</b>\n\n'
+            f"📝 Old Name: {html.escape(movie['title'])}\n"
+            f"🎬 New Name: <b>{html.escape(new_name)}</b>\n"
+            f'🆔 Movie ID: <code>{movie_id}</code>\n\n'
+            '✅ Search and download pages now use the new name.\n'
+            + ('✅ Storage file caption renamed.\n' if caption_updated else
+               '⚠️ File caption not renamed — give the bot <b>Edit Messages</b> permission in MyStorage.\n')
+            + ('✅ Google Sheet updated.' if sheet_ok else
+               '⚠️ Google Sheet not updated — the sheet still shows the old name, '
+               'so correct its Movie Name cell yourself.')
+        )
+        await message.reply_text(text, parse_mode=ParseMode.HTML)
+
     async def add_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user, message = update.effective_user, update.effective_message
         if not user or not message or not self.is_super_admin(user.id):

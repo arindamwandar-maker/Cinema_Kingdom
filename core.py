@@ -1,5 +1,6 @@
 import logging
 
+from telegram import BotCommand, BotCommandScopeChat
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -51,6 +52,7 @@ class CinemaKingdomCore:
         self.application = (
             Application.builder()
             .token(self.config.BOT_TOKEN)
+            .post_init(self.register_command_menu)
             .build()
         )
 
@@ -110,6 +112,38 @@ class CinemaKingdomCore:
         )
 
         self._register_handlers()
+
+    async def register_command_menu(self, application):
+        """Fill Telegram's / suggestion list.
+
+        Users get the download commands everywhere; the short storage keys
+        only appear inside MyStorage, where they are the ones that work.
+        """
+        try:
+            await application.bot.set_my_commands([
+                BotCommand("start", "Open the bot"),
+                BotCommand("help", "How to download a movie"),
+                BotCommand("request", "Request a movie"),
+            ])
+
+        except Exception as exc:
+            logging.warning("Bot command menu not set: %s", exc)
+
+        try:
+            await application.bot.set_my_commands(
+                [
+                    BotCommand("rn", "Rename a movie: /rn MovieID New Name"),
+                    BotCommand("del", "Delete a movie: /del MovieID"),
+                    BotCommand("rst", "Restore a movie: /rst MovieID"),
+                    BotCommand("syncnames", "Apply names edited in the Google Sheet"),
+                ],
+                scope=BotCommandScopeChat(
+                    self.config.STORAGE_CHANNEL
+                ),
+            )
+
+        except Exception as exc:
+            logging.warning("Storage command menu not set: %s", exc)
 
     async def error_handler(
         self,
@@ -201,15 +235,22 @@ class CinemaKingdomCore:
 
         app.add_handler(
             CommandHandler(
-                "delete",
+                ("delete", "del"),
                 self.admin_handler.delete_movie
             )
         )
 
         app.add_handler(
             CommandHandler(
-                "restore",
+                ("restore", "rst"),
                 self.admin_handler.restore_movie
+            )
+        )
+
+        app.add_handler(
+            CommandHandler(
+                ("rename", "rn"),
+                self.admin_handler.rename_movie
             )
         )
 
@@ -266,7 +307,7 @@ class CinemaKingdomCore:
                 )
                 & filters.TEXT
                 & filters.Regex(
-                    r"^/delete(?:@\w+)?\s+\d+\s*$"
+                    r"^/(?:delete|del)(?:@\w+)?\s+\d+\s*$"
                 ),
                 self.admin_handler.delete_movie
             )
@@ -279,9 +320,22 @@ class CinemaKingdomCore:
                 )
                 & filters.TEXT
                 & filters.Regex(
-                    r"^/restore(?:@\w+)?\s+\d+\s*$"
+                    r"^/(?:restore|rst)(?:@\w+)?\s+\d+\s*$"
                 ),
                 self.admin_handler.restore_movie
+            )
+        )
+
+        app.add_handler(
+            MessageHandler(
+                filters.Chat(
+                    self.config.STORAGE_CHANNEL
+                )
+                & filters.TEXT
+                & filters.Regex(
+                    r"^/(?:rename|rn)(?:@\w+)?\s+\d+\s+\S.*$"
+                ),
+                self.admin_handler.rename_movie
             )
         )
 

@@ -226,6 +226,30 @@ class GoogleSheetService:
             logging.exception('Google Sheet restore update error: %s', exc)
             return False
 
+    def set_storage_movie_name(self, movie_id, movie_name) -> bool:
+        """Rename a Storage Uploads row and record it as synced.
+
+        Last Synced Name is written too, otherwise the background sync reads
+        the bot's own rename as a manual sheet edit and processes it again.
+        """
+        worksheet = self.get_or_create_worksheet('Storage Uploads', self.STORAGE_HEADERS)
+        if worksheet is None:
+            return False
+
+        try:
+            for row_number, stored_id in enumerate(worksheet.col_values(2), start=1):
+                if row_number > 1 and str(stored_id).strip() == str(movie_id):
+                    worksheet.update(
+                        range_name=f'A{row_number}:A{row_number}',
+                        values=[[movie_name or '']],
+                    )
+                    worksheet.update_cell(row_number, 10, movie_name or '')
+                    return True
+            return False
+        except Exception as exc:
+            logging.exception('Google Sheet rename update error: %s', exc)
+            return False
+
     def get_storage_name_changes(self) -> List[Dict]:
         """Return active rows whose Movie Name differs from Last Synced Name."""
         worksheet = self.get_or_create_worksheet('Storage Uploads', self.STORAGE_HEADERS)

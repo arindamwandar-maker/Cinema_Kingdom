@@ -127,8 +127,9 @@ class StorageService:
             f'👤 <b>Upload By:</b> {html.escape(payload["uploader"])}\n'
             f'🕒 <b>Date & Time:</b> {upload_time}\n'
             f'💾 <b>File Size:</b> {size_text}\n\n'
-            f'{"✅ Google Sheet updated" if sheet_ok else "⚠️ Google Sheet not updated"}\n'
-            f'🗑 Delete: <code>/delete {movie_id}</code>'
+            f'{"✅ Google Sheet updated" if sheet_ok else "⚠️ Google Sheet not updated"}\n\n'
+            f'✏️ Rename: <code>/rn {movie_id} New Name</code>\n'
+            f'🗑 Delete: <code>/del {movie_id}</code>'
         )
 
         if edit_existing:

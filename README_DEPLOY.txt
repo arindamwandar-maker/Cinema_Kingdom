@@ -152,11 +152,7 @@ GOOGLE SHEET
   GOOGLE_CREDENTIALS_BASE64.
 - The bot creates/uses worksheets named Movie Requests and Storage Uploads.
 - Test with /sheettest as an admin.
-- Renaming a movie: edit the Movie Name column of the Storage Uploads tab and
-  leave Movie ID and Status alone. The bot then updates the database, search,
-  download pages and the file caption in MyStorage, and copies the name into
-  Last Synced Name. /syncnames as an admin runs that check immediately and
-  reports every rename. Old names stay searchable.
+- See GOOGLE SHEET MOVIE NAME SYNC below for renaming movies from the sheet.
 
 SEARCH FLOW
 - Users search only in GROUP_ID. Private DM search is disabled.
@@ -166,10 +162,10 @@ SEARCH FLOW
   direct Telegram token link.
 
 DELETE / RESTORE
-- In MyStorage use /delete MovieID, for example /delete 12.
+- In MyStorage use /del MovieID (or the full /delete 12).
 - Delete is soft delete: record remains in SQLite, disappears from search,
   and Google Sheet Status becomes Movie Deleted.
-- Use /restore MovieID to restore a soft-deleted record.
+- Use /rst MovieID (or /restore 12) to restore a soft-deleted record.
 
 ADMIN
 - Super admin can use /addadmin ID and /removeadmin ID.
@@ -181,6 +177,16 @@ GOOGLE SHEET MOVIE NAME SYNC
 - It updates the database title and the original MyStorage post caption.
 - Telegram does not allow renaming the actual uploaded filename; only the
   caption/title changes.
+- /syncnames runs that check immediately and reports each rename.
+
+RENAME AND STORAGE COMMAND KEYS
+- Type / in MyStorage and Telegram suggests these; they only work there:
+  /rn MovieID New Name     rename (alias /rename)
+  /del MovieID             delete (alias /delete)
+  /rst MovieID             restore (alias /restore)
+  /syncnames               apply names edited in the sheet
+- /rn updates the database, search, download pages, the MyStorage caption and
+  the Movie Name cell of the sheet. The previous names stay searchable.
 
 FEATURES
 - Promotional join message runs every PROMO_INTERVAL seconds (minimum 120).

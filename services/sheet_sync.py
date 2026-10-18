@@ -64,7 +64,7 @@ class SheetSyncService:
                 )
                 continue
 
-            result['caption_updated'] = await self._sync_caption(context, movie, new_name)
+            result['caption_updated'] = await self.sync_caption(context, movie, new_name)
 
             if result['renamed'] and not result['caption_updated']:
                 await self._notify_caption_failure(context, movie_id, movie['title'], new_name)
@@ -81,7 +81,8 @@ class SheetSyncService:
 
         return results
 
-    async def _sync_caption(self, context, movie, new_name) -> bool:
+    async def sync_caption(self, context, movie, new_name) -> bool:
+        """Rename the stored file post so MyStorage matches the new title."""
         source_chat_id = movie.get('source_chat_id')
         source_message_id = movie.get('source_message_id')
 
