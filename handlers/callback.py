@@ -597,19 +597,6 @@ class CallbackHandler:
             else "Link Generated"
         )
 
-        warning = ""
-
-        if no_ad_page and self.db.is_admin(
-            user.id,
-            self.config.ADMIN_IDS
-        ):
-            warning = (
-                "\n\n<i>⚠️ No ad ran on this click. "
-                + html.escape(cause)
-                + " ALLOW_DIRECT_LINK is on, so the file still goes out - "
-                + "set it to false for strict ad-only delivery.</i>"
-            )
-
         local_time = datetime.now(
             ZoneInfo(
                 self.config.LOCAL_TIMEZONE
@@ -665,8 +652,7 @@ class CallbackHandler:
             "✅ Your download link is ready.\n\n"
             f"{steps}\n"
             "⏳ The link message and movie file "
-            "will be removed after 5 minutes."
-            + warning,
+            "will be removed after 5 minutes.",
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.shortener_button(
                 short_link
