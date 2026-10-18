@@ -12,10 +12,11 @@ from services.shortener import ShortenerService
 
 
 class AdminHandler:
-    def __init__(self, db: Database, config: Config):
+    def __init__(self, db: Database, config: Config, sheet_sync=None):
         self.db = db
         self.config = config
         self.sheet = GoogleSheetService(config)
+        self.sheet_sync = sheet_sync
         self.shortener = ShortenerService(
             config.SHORTENER_API_KEY,
             config.SHORTENER_BASE_URL,
@@ -282,3 +283,54 @@ class AdminHandler:
             head = '✅ Ad link works: ' + result + '\n\n'
 
         await message.reply_text(head + self.shortener.describe())
+
+    async def sync_names(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user, message = update.effective_user, update.effective_message
+        if not user or not message or not self.is_admin(user.id):
+            return
+
+        if self.sheet_sync is None:
+            await message.reply_text('❌ Name sync is not wired up.')
+            return
+
+        results = await self.sheet_sync.sync_movie_names(context)
+
+        if not results:
+            await message.reply_text(
+                '✅ No name edit found.\n\n'
+                'Open the <b>Storage Uploads</b> tab, change the <b>Movie Name</b> column, '
+                'then run /syncnames again.',
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        text = '🎬 <b>Movie names from Google Sheet</b>\n\n'
+
+        for item in results[:20]:
+            if item['error']:
+                text += (
+                    f"❌ Row {item['row_number']}: ID <code>{item['movie_id']}</code> "
+                    f"— {item['error']}.\n"
+                )
+            elif item['renamed']:
+                mark = '✅' if item['caption_updated'] else '⚠️'
+                text += (
+                    f"{mark} <code>{item['movie_id']}</code> "
+                    f"{html.escape(item['old_name'])}\n"
+                    f"   → <b>{html.escape(item['new_name'])}</b>\n"
+                )
+            else:
+                text += (
+                    f"• <code>{item['movie_id']}</code> already had the name "
+                    f"<b>{html.escape(item['new_name'])}</b>, nothing to change.\n"
+                )
+
+        if len(results) > 20:
+            text += f"… and {len(results) - 20} more rows.\n"
+
+        text += (
+            '\n✅ = bot name and the file caption in MyStorage both renamed.\n'
+            '⚠️ = search/downloads use the new name, but the file caption could not be '
+            'edited — give the bot <b>Edit Messages</b> permission in MyStorage.'
+        )
+        await message.reply_text(text, parse_mode=ParseMode.HTML)

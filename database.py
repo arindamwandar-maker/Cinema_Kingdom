@@ -165,6 +165,29 @@ class Database:
         if not new_title:
             return False
 
+        row = self.conn.execute(
+            "SELECT title, tags FROM movies WHERE id=? AND status='active'",
+            (movie_id,)
+        ).fetchone()
+
+        if not row:
+            return False
+
+        # The previous names stay in tags so a movie is still found by the
+        # title people saw before it was renamed. Existing tags are kept
+        # verbatim because a filename can contain '|'.
+        names = [new_title]
+        old_title = (row['title'] or '').strip()
+        old_tags = (row['tags'] or '').strip()
+
+        if old_title.lower() != new_title.lower():
+            names.append(old_title)
+
+        if old_tags and old_tags.lower() != new_title.lower():
+            names.append(old_tags)
+
+        tags = ' | '.join(name.lower() for name in names)
+
         cursor = self.conn.cursor()
         cursor.execute(
             """
@@ -172,7 +195,7 @@ class Database:
             SET title=?, tags=?
             WHERE id=? AND status='active'
             """,
-            (new_title, new_title.lower(), movie_id),
+            (new_title, tags, movie_id),
         )
         self.conn.commit()
         return cursor.rowcount > 0

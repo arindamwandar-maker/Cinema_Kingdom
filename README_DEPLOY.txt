@@ -152,6 +152,11 @@ GOOGLE SHEET
   GOOGLE_CREDENTIALS_BASE64.
 - The bot creates/uses worksheets named Movie Requests and Storage Uploads.
 - Test with /sheettest as an admin.
+- Renaming a movie: edit the Movie Name column of the Storage Uploads tab and
+  leave Movie ID and Status alone. The bot then updates the database, search,
+  download pages and the file caption in MyStorage, and copies the name into
+  Last Synced Name. /syncnames as an admin runs that check immediately and
+  reports every rename. Old names stay searchable.
 
 SEARCH FLOW
 - Users search only in GROUP_ID. Private DM search is disabled.

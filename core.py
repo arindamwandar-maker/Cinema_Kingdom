@@ -85,9 +85,15 @@ class CinemaKingdomCore:
             self.config
         )
 
-        self.admin_handler = AdminHandler(
+        self.sheet_sync = SheetSyncService(
             self.db,
             self.config
+        )
+
+        self.admin_handler = AdminHandler(
+            self.db,
+            self.config,
+            self.sheet_sync
         )
 
         self.moderation_handler = ModerationHandler(
@@ -97,11 +103,6 @@ class CinemaKingdomCore:
 
         self.auto_delete = AutoDeleteService(
             self.db
-        )
-
-        self.sheet_sync = SheetSyncService(
-            self.db,
-            self.config
         )
 
         self.promotion = PromotionService(
@@ -244,6 +245,13 @@ class CinemaKingdomCore:
             CommandHandler(
                 "adtest",
                 self.admin_handler.ad_test
+            )
+        )
+
+        app.add_handler(
+            CommandHandler(
+                "syncnames",
+                self.admin_handler.sync_names
             )
         )
 
