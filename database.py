@@ -62,6 +62,9 @@ class Database:
         cur.execute('''CREATE TABLE IF NOT EXISTS cooldowns(
             user_id INTEGER PRIMARY KEY, last_message TEXT
         )''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS group_timers(
+            user_id INTEGER PRIMARY KEY, last_message TEXT
+        )''')
         cur.execute('''CREATE TABLE IF NOT EXISTS messages(
             id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, message_id INTEGER,
             movie_id INTEGER, expire_time TEXT, UNIQUE(chat_id, message_id)
@@ -265,6 +268,24 @@ class Database:
 
     def cooldown_remaining(self, user_id: int, seconds: int = 60) -> int:
         row = self.conn.execute('SELECT last_message FROM cooldowns WHERE user_id=?', (user_id,)).fetchone()
+        if not row:
+            return 0
+        elapsed = (datetime.now() - datetime.fromisoformat(row['last_message'])).total_seconds()
+        return max(0, seconds - int(elapsed))
+
+    def check_group_timer(self, user_id: int, seconds: int = 60) -> bool:
+        # Kept apart from the search cooldowns table: stamping it here would
+        # also block this user's next search.
+        row = self.conn.execute('SELECT last_message FROM group_timers WHERE user_id=?', (user_id,)).fetchone()
+        now = datetime.now()
+        if row and now - datetime.fromisoformat(row['last_message']) < timedelta(seconds=seconds):
+            return False
+        self.conn.execute('INSERT OR REPLACE INTO group_timers(user_id, last_message) VALUES(?,?)', (user_id, now.isoformat()))
+        self.conn.commit()
+        return True
+
+    def group_timer_remaining(self, user_id: int, seconds: int = 60) -> int:
+        row = self.conn.execute('SELECT last_message FROM group_timers WHERE user_id=?', (user_id,)).fetchone()
         if not row:
             return 0
         elapsed = (datetime.now() - datetime.fromisoformat(row['last_message'])).total_seconds()

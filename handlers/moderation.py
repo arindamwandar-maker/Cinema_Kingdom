@@ -29,6 +29,32 @@ class ModerationHandler:
             return
 
         text = (message.text or message.caption or '').strip()
+
+        interval = self.config.GROUP_MESSAGE_INTERVAL
+        if interval > 0 and (text or message.effective_attachment):
+            if not self.db.check_group_timer(user.id, interval):
+                remain = self.db.group_timer_remaining(user.id, interval)
+                try:
+                    await message.delete()
+                except Exception as exc:
+                    logging.info('Timer message not deletable: %s', exc)
+
+                notice = await context.bot.send_message(
+                    chat_id=chat.id,
+                    text=(
+                        '⏳ <b>Message Timer</b>\n\n'
+                        f'{user.mention_html()}, you can send the next message '
+                        f'after <b>{remain} seconds</b>.'
+                    ),
+                    parse_mode=ParseMode.HTML,
+                )
+                self.db.add_message(
+                    notice.chat.id,
+                    notice.message_id,
+                    seconds=min(remain + 2, self.config.AUTO_DELETE_TIME)
+                )
+                raise ApplicationHandlerStop
+
         if not text:
             return
 

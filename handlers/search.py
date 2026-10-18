@@ -15,12 +15,15 @@ def render_search_results(
     page: int,
     page_size: int,
     bot_username: str,
-    heading: str = '🎬 <b>Search Results</b>'
+    heading: str = '🎬 <b>Search Result</b>'
 ):
     """Build one page of search results as (message text, keyboard).
 
     Used for a normal search and for the 18+ confirmation, and again when a
     page button is pressed, so all three always look the same.
+
+    The titles live only on the buttons: the text just states the query, the
+    number of matches and the current page.
     """
     total = len(movies)
     page_size = max(1, page_size)
@@ -36,23 +39,18 @@ def render_search_results(
     lines = [
         f'🔎 <b>Search Query</b> — <code>{html.escape(query_text)}</code>',
         '',
-        f'{heading} — <b>{total} nos</b>',
+        f'{heading} — <b>{total} files</b>',
     ]
 
     if total_pages > 1:
-        numbers = ', '.join(
-            f'<b>{candidate}</b>' if candidate == page else str(candidate)
-            for candidate in range(1, total_pages + 1)
-        )
-        lines.append(f'📄 <b>Pages</b> — {numbers}')
-
-    lines.append('')
-
-    for index, movie in enumerate(page_movies, start=start + 1):
         lines.append(
-            f'<b>{index} nos</b> — {html.escape(movie["title"])}'
-            f' ({Keyboards.format_size(movie.get("file_size"))})'
+            f'📄 <b>Pages</b> — <b>{page}/{total_pages}</b>'
         )
+
+    lines.extend([
+        '',
+        '⬇️ Here is your query result, please select',
+    ])
 
     keyboard = Keyboards.search_results_keyboard(
         page_movies,

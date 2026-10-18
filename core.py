@@ -1,6 +1,10 @@
 import logging
 
-from telegram import BotCommand, BotCommandScopeChat
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeChat,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -113,37 +117,75 @@ class CinemaKingdomCore:
 
         self._register_handlers()
 
+    ADMIN_COMMANDS = [
+        BotCommand("stats", "Bot statistics"),
+        BotCommand("requests", "Pending movie requests"),
+        BotCommand("rn", "Rename a movie: /rn MovieID New Name"),
+        BotCommand("del", "Delete a movie: /del MovieID"),
+        BotCommand("rst", "Restore a movie: /rst MovieID"),
+        BotCommand("syncnames", "Apply names edited in the Google Sheet"),
+        BotCommand("broadcast", "Send a message to all users"),
+        BotCommand("sendgroup", "Post in the group"),
+        BotCommand("sendchannel", "Post in the channel"),
+        BotCommand("sendboth", "Post in the group and the channel"),
+        BotCommand("admins", "List bot admins"),
+        BotCommand("addadmin", "Add an admin: /addadmin UserID"),
+        BotCommand("removeadmin", "Remove an admin: /removeadmin UserID"),
+        BotCommand("sheettest", "Test the Google Sheet connection"),
+        BotCommand("adtest", "Test the ad link shortener"),
+    ]
+
+    STORAGE_COMMANDS = [
+        BotCommand("rn", "Rename a movie: /rn MovieID New Name"),
+        BotCommand("del", "Delete a movie: /del MovieID"),
+        BotCommand("rst", "Restore a movie: /rst MovieID"),
+        BotCommand("stats", "Bot statistics"),
+        BotCommand("syncnames", "Apply names edited in the Google Sheet"),
+    ]
+
     async def register_command_menu(self, application):
         """Fill Telegram's / suggestion list.
 
-        Users get the download commands everywhere; the short storage keys
-        only appear inside MyStorage, where they are the ones that work.
+        Users get the download commands everywhere; the admin keys appear
+        wherever the admin is, and the short storage keys also work inside
+        MyStorage, where channel posts carry no user.
         """
-        try:
-            await application.bot.set_my_commands([
-                BotCommand("start", "Open the bot"),
-                BotCommand("help", "How to download a movie"),
-                BotCommand("request", "Request a movie"),
-            ])
-
-        except Exception as exc:
-            logging.warning("Bot command menu not set: %s", exc)
-
-        try:
-            await application.bot.set_my_commands(
+        scopes = [
+            (
                 [
-                    BotCommand("rn", "Rename a movie: /rn MovieID New Name"),
-                    BotCommand("del", "Delete a movie: /del MovieID"),
-                    BotCommand("rst", "Restore a movie: /rst MovieID"),
-                    BotCommand("syncnames", "Apply names edited in the Google Sheet"),
+                    BotCommand("start", "Open the bot"),
+                    BotCommand("help", "How to download a movie"),
+                    BotCommand("request", "Request a movie"),
                 ],
-                scope=BotCommandScopeChat(
-                    self.config.STORAGE_CHANNEL
-                ),
-            )
+                None,
+                "Bot",
+            ),
+            (
+                self.ADMIN_COMMANDS,
+                BotCommandScopeAllChatAdministrators(),
+                "Admin",
+            ),
+            (
+                self.ADMIN_COMMANDS,
+                BotCommandScopeChat(self.config.SUPER_ADMIN_ID),
+                "Super admin private",
+            ),
+            (
+                self.STORAGE_COMMANDS,
+                BotCommandScopeChat(self.config.STORAGE_CHANNEL),
+                "Storage",
+            ),
+        ]
 
-        except Exception as exc:
-            logging.warning("Storage command menu not set: %s", exc)
+        for commands, scope, label in scopes:
+            try:
+                if scope is None:
+                    await application.bot.set_my_commands(commands)
+                else:
+                    await application.bot.set_my_commands(commands, scope=scope)
+
+            except Exception as exc:
+                logging.warning("%s command menu not set: %s", label, exc)
 
     async def error_handler(
         self,
@@ -336,6 +378,19 @@ class CinemaKingdomCore:
                     r"^/(?:rename|rn)(?:@\w+)?\s+\d+\s+\S.*$"
                 ),
                 self.admin_handler.rename_movie
+            )
+        )
+
+        app.add_handler(
+            MessageHandler(
+                filters.Chat(
+                    self.config.STORAGE_CHANNEL
+                )
+                & filters.TEXT
+                & filters.Regex(
+                    r"^/(?:stats|stat)(?:@\w+)?\s*$"
+                ),
+                self.admin_handler.stats
             )
         )
 

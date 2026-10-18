@@ -197,6 +197,15 @@ class Config:
         )
     )
 
+    # Seconds a member must wait between messages in the group.
+    GROUP_MESSAGE_INTERVAL = max(
+        0,
+        _safe_int(
+            os.getenv("GROUP_MESSAGE_INTERVAL"),
+            60
+        )
+    )
+
     MAX_MOVIES_PER_SEARCH = max(
         1,
         _safe_int(

@@ -187,6 +187,32 @@ RENAME AND STORAGE COMMAND KEYS
   /syncnames               apply names edited in the sheet
 - /rn updates the database, search, download pages, the MyStorage caption and
   the Movie Name cell of the sheet. The previous names stay searchable.
+- /stats also works in MyStorage: post it there and the bot replies with a new
+  post (Telegram does not allow replying inside a broadcast channel).
+
+ADMIN / COMMAND MENU
+- Type / as an admin and Telegram lists every admin command, in the group, in
+  MyStorage and in the private chat with the bot.
+- Normal users only see /start, /help and /request.
+- The menus are refreshed on every bot start, so edit core.py
+  (ADMIN_COMMANDS / STORAGE_COMMANDS) to add a key.
+
+SEARCH RESULTS DISPLAY
+- The group message shows the search query, the number of matches and the page
+  (Pages — 1/3); the movie names only appear on the buttons below, labelled
+  "{File Size} - {Movie Name}".
+- SEARCH_RESULTS_PER_PAGE (default 5) is the number of buttons per page,
+  MAX_MOVIES_PER_SEARCH (default 15) is the maximum number of matches.
+- Very long queries cannot fit in a page button, so those searches show one
+  page only.
+
+GROUP MESSAGE TIMER
+- GROUP_MESSAGE_INTERVAL (default 60) is the number of seconds a member must
+  wait between messages in the group. Admins are exempt, 0 turns it off.
+- The bot deletes the too-early message and posts a notice naming the user with
+  the seconds left; the notice deletes itself.
+- Telegram gives bots no way to draw a countdown inside the member's typing
+  box, so the wait is shown as that self-deleting notice instead.
 
 FEATURES
 - Promotional join message runs every PROMO_INTERVAL seconds (minimum 120).

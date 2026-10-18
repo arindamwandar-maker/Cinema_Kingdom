@@ -32,7 +32,15 @@ class AdminHandler:
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user, message = update.effective_user, update.effective_message
-        if not user or not message or not self.is_admin(user.id):
+        chat = update.effective_chat
+        if not message:
+            return
+        if user:
+            if not self.is_admin(user.id):
+                return
+        elif not chat or chat.id != self.config.STORAGE_CHANNEL:
+            # A channel post carries no user, so only accept it from the
+            # private MyStorage channel where only he can publish.
             return
         cur = self.db.conn.cursor()
         active = cur.execute("SELECT COUNT(*) FROM movies WHERE status='active'").fetchone()[0]
@@ -42,13 +50,21 @@ class AdminHandler:
         downloads = cur.execute("SELECT COALESCE(SUM(downloads),0) FROM movies WHERE status='active'").fetchone()[0]
         link_generated = self.db.count_link_events('Link Generated')
         files_delivered = self.db.count_link_events('File Delivered')
-        await message.reply_text(
+        text = (
             '📊 <b>Cinema Kingdom Statistics</b>\n\n'
             f'🎬 Active Movies: {active}\n🗑 Deleted Movies: {deleted}\n'
             f'👥 Users: {users}\n📥 Pending Requests: {pending}\n'
-            f'🔗 Links Generated: {link_generated}\n✅ Files Delivered: {files_delivered}\n⬇ Downloads: {downloads}',
-            parse_mode=ParseMode.HTML,
+            f'🔗 Links Generated: {link_generated}\n✅ Files Delivered: {files_delivered}\n⬇ Downloads: {downloads}'
         )
+        if chat and chat.type == 'channel':
+            # Channels do not allow replying to a post, so send a new post.
+            await context.bot.send_message(
+                chat_id=chat.id,
+                text=text,
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            await message.reply_text(text, parse_mode=ParseMode.HTML)
 
     async def requests(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user, message = update.effective_user, update.effective_message

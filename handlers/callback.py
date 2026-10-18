@@ -422,7 +422,7 @@ class CallbackHandler:
             1,
             self.config.SEARCH_RESULTS_PER_PAGE,
             bot_info.username or self.config.BOT_USERNAME,
-            heading='🔞 <b>18+ Search Results</b>'
+            heading='🔞 <b>18+ Search Result</b>'
         )
 
         try:
