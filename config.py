@@ -87,7 +87,7 @@ class Config:
     ).strip().replace("@", "")
 
     # =========================
-    # GPLinks Shortener
+    # Ad-link shortener (Shrinkme, GPLinks - same API shape)
     # =========================
 
     SHORTENER_API_KEY = os.getenv(
@@ -97,7 +97,7 @@ class Config:
 
     SHORTENER_BASE_URL = os.getenv(
         "SHORTENER_BASE_URL",
-        "https://api.gplinks.com/api"
+        "https://shrinkme.io/api"
     ).strip()
 
     # Keep blank if you do not need custom alias.

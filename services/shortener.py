@@ -11,13 +11,13 @@ class ShortenerService:
     def __init__(
         self,
         api_key: str,
-        base_url: str = "https://api.gplinks.com/api",
+        base_url: str = "https://shrinkme.io/api",
         alias: str = "",
         response_format: str = "json"
     ):
         self.api_key = (api_key or "").strip()
         self.base_url = (
-            base_url or "https://api.gplinks.com/api"
+            base_url or "https://shrinkme.io/api"
         ).strip()
         self.alias = (alias or "").strip()
         self.response_format = (
@@ -50,7 +50,7 @@ class ShortenerService:
 
         if status == "error":
             logging.warning(
-                "GPLinks API error: %s",
+                "Shortener API error: %s",
                 data.get("message", data)
             )
             return None
@@ -58,10 +58,12 @@ class ShortenerService:
         possible_keys = (
             "shortenedUrl",
             "shortened_url",
-            "shorturl",
+            "shortUrl",
             "short_url",
+            "shorturl",
             "short",
             "short_link",
+            "link",
             "url",
             "result",
             "data"
@@ -160,14 +162,14 @@ class ShortenerService:
                         ).strip()
 
                         logging.info(
-                            "GPLinks status=%s response=%s",
+                            "Shortener status=%s response=%s",
                             response.status,
                             raw_text[:500]
                         )
 
                         if response.status != 200:
                             logging.warning(
-                                "GPLinks HTTP error: %s",
+                                "Shortener HTTP error: %s",
                                 response.status
                             )
                             continue
@@ -182,7 +184,7 @@ class ShortenerService:
 
                         except json.JSONDecodeError:
                             logging.warning(
-                                "GPLinks invalid response: %s",
+                                "Shortener invalid response: %s",
                                 raw_text[:500]
                             )
                             continue
@@ -195,24 +197,24 @@ class ShortenerService:
                             return short_url
 
                         logging.warning(
-                            "Unknown GPLinks response: %s",
+                            "Unknown shortener response: %s",
                             parsed_data
                         )
 
             except aiohttp.ClientError as exc:
                 logging.warning(
-                    "GPLinks network error: %s",
+                    "Shortener network error: %s",
                     exc
                 )
 
             except Exception as exc:
                 logging.exception(
-                    "GPLinks unexpected error: %s",
+                    "Shortener unexpected error: %s",
                     exc
                 )
 
         logging.warning(
-            "GPLinks failed. "
+            "Shortener failed. "
             "Using direct Telegram link."
         )
 

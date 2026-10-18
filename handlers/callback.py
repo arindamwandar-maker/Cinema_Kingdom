@@ -512,7 +512,10 @@ class CallbackHandler:
             cause = (
                 "SHORTENER_API_KEY is empty."
                 if not self.shortener.api_key
-                else "GPLinks did not return a short link."
+                else (
+                    self.shortener.base_url.split("//")[-1].split("/")[0]
+                    + " did not return a short link."
+                )
             )
 
             logging.warning(
