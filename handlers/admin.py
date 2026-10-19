@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from config import Config
 from database import Database
 from services.community import render_request_reminder
+from services.countries import country_name
 from services.google_sheet import GoogleSheetService
 from services.shortener import ShortenerService
 
@@ -135,6 +136,16 @@ class AdminHandler:
                 )
                 logging.info('Member count unavailable for %s: %s', chat_id, exc)
 
+        counts = self.db.country_counts()
+        if counts:
+            lines += ['', '🌍 <b>What your members watch</b>']
+            for row in counts[:12]:
+                lines.append(
+                    f'   {html.escape(country_name(row["country"]))} — <b>{row["total"]}</b>'
+                )
+
+        numbers = sum(1 for member in self.db.get_users() if member.get('phone_number'))
+        lines += ['', f'📱 Members who shared a number: <b>{numbers}</b>']
         lines += ['', f'🕒 {self.local_time()}']
         text = '\n'.join(lines)
 

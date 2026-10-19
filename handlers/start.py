@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 from config import Config
 from database import Database
 from keyboards import Keyboards
+from handlers.country import CountryHandler
 from services.force_join import ForceJoinService
 from services.google_sheet import GoogleSheetService
 from services.i18n import t
@@ -22,6 +23,7 @@ class StartHandler:
         self.force_join = ForceJoinService(config, bot)
         self.token_manager = TokenManager(db)
         self.sheet = GoogleSheetService(config)
+        self.country = CountryHandler(db, config)
 
     def link_line(self, emoji: str, username: str, label: str, prefix: str = ''):
         if not username:
@@ -37,10 +39,12 @@ class StartHandler:
             t(code, 'brand'),
             '━━━━━━━━━━━━━━━━━━━',
             f'🎬 <b>{html.escape(title)}</b>',
-            '',
-            t(code, 'delivered'),
-            '',
         ]
+
+        if self.config.FILE_CAPTION_BADGE:
+            lines += ['', f'<b>{html.escape(self.config.FILE_CAPTION_BADGE)}</b>']
+
+        lines += ['', t(code, 'delivered'), '']
 
         for line in (
             self.link_line('👥', self.config.GROUP_USERNAME, self.config.GROUP_NAME),
@@ -73,6 +77,15 @@ class StartHandler:
             payload = context.args[0]
             if not await self.force_join.check_force_join(user.id):
                 await self.force_join_message(update)
+                return
+
+            # The group welcome buttons open the country picker / number share.
+            if payload == 'country':
+                await self.country.menu(update, context)
+                return
+
+            if payload in ('share_number', 'number'):
+                await self.country.ask_number(update, context)
                 return
 
             # Group search opens the bot with movie_<id> and shows the download button.

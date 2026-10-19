@@ -246,6 +246,9 @@ WHAT TELEGRAM DOES NOT ALLOW
   promotions. The bot deletes any group link a member posts instead.
 - Making the group Private would take it off the search page and stop users
   reaching it from the bot, so it stays Public with the rules above.
+- Reading a member's phone number. The only number a bot ever gets is one the
+  member hands over with the Share My Number button, so a Country or Mobile cell
+  stays empty until that member taps it - nobody can fill in the old members.
 
 FEATURES
 - Promotional join message runs every PROMO_INTERVAL seconds (minimum 120).
@@ -286,16 +289,48 @@ MOVIE REQUEST REMINDERS
 
 GROUP MEMBERS WORKSHEET
 - One row per user the bot knows: User ID, Username, Name, Role (Super Admin /
-  Admin / Member), Join Date, Last Active, Total Requests.
-- Rows are appended only, never rewritten, so you can add your own columns.
+  Admin / Member), Join Date, Last Active, Total Requests, Country, Mobile.
+- Country and Mobile are the last two columns on purpose, so rows already in
+  your sheet keep their column positions. The hourly job now also refreshes
+  those two cells of an old row when a member finally picks a country or shares
+  a number; no other cell of an existing row is ever rewritten.
 - Telegram does not let a bot read a group's member list, so this sheet grows
   from group joins and from anyone who uses the bot.
 - Runs every MEMBER_SHEET_INTERVAL seconds (default 3600).
+
+MEMBER COUNTRY AND MOBILE (/country, /number)
+- /country opens a picker with 110 countries, "🌍 More countries" pages through
+  them, the choice is stored per user and lands in the sheet.
+- /number (or the 📱 Share My Number button in the picker and in the group
+  welcome) shows a Telegram button that sends the member's own contact. The bot
+  stores that number and works out the country from the dialling code (+91 ->
+  India), and the member can still correct the country with /country.
+- The group welcome message carries both as buttons that open the bot privately
+  (t.me/<BOT_USERNAME>?start=country and ?start=share_number).
+- WHAT TELEGRAM MAKES IMPOSSIBLE: a bot can never read a member's number. Only
+  a member who presses the Share button gives it, so numbers and countries of
+  the people who joined before this feature existed cannot be generated
+  afterwards - their rows stay blank until they tap it themselves.
+- /members now also prints the country tally and how many members shared a
+  number, so you can see which cinema to upload next.
+
+PINNED GROUP RULES
+- On every boot the bot posts GROUP_RULES_MSG in the group and in the community
+  channel and pins it, so the same rules text sits on top of both.
+- It edits its own earlier pinned post instead of posting a new copy - the
+  message id is remembered in bot.db (settings table).
+- The pinned rules are the only bot message the 10 minute sweep never deletes:
+  its deletion booking is removed as soon as it is posted.
+- Needs the bot to be an admin of both chats with "Pin Messages" on.
+- To use your own wording, set GROUP_RULES_MSG in the .env file (HTML such as
+  <b> works). A single space disables the pinning altogether.
 
 GROUP WELCOME MESSAGE
 - A new group member is greeted in the group with GROUP_WELCOME_MSG, which
   names them, shows GROUP_NAME and adds the pin line with SUPER_ADMIN_USERNAME
   when you have filled that in.
+- Under the greeting sit two buttons, 🌍 Select Country and 📱 Share My Number,
+  which open the bot in a private chat.
 - The bot only receives join notifications when it reads all group messages:
   BotFather -> /setprivacy -> Disable, or make the bot a group admin.
 - The greeting also records the member, which is how they reach the
@@ -304,7 +339,8 @@ GROUP WELCOME MESSAGE
 UPLOADER NAMES AND FILE CAPTION
 - Storage uploads remember who uploaded the file, and the download page plus
   Movie Details show "Uploaded by: @name".
-- The delivered file caption carries the title, FILE_CAPTION_NOTE and links to
+- The delivered file caption carries the title, the bold FILE_CAPTION_BADGE line
+  ("No Theatre Print 🚫 • Only FHD Files 📀"), FILE_CAPTION_NOTE and links to
   GROUP_NAME/GROUP_USERNAME and CHANNEL_NAME/CHANNEL_USERNAME. Leaving one
   blank drops only that line. No admin username is printed there; SUPER_ADMIN_
   USERNAME is only used in the group welcome message.
@@ -322,13 +358,15 @@ PENDING REQUESTS ON DEMAND (/pending)
 EVERY BOT MESSAGE DELETES ITSELF
 - AutoDeleteBot (services/auto_delete.py) is the bot object the whole app uses.
   Every Telegram message the bot sends is booked for deletion after
-  AUTO_DELETE_TIME seconds (default 300 = 5 minutes), in the group and in
-  private chats, without each handler having to remember.
-- Two exemptions, both on purpose:
-  * MyStorage (STORAGE_CHANNEL) - those posts hold the original files, so
-    deleting them would empty the catalogue.
-  * Admin chats - the pending request list would vanish before a Solved button
-    can be pressed. DELETE_ADMIN_MESSAGES=true removes this exemption.
+  AUTO_DELETE_TIME seconds (default 600 = 10 minutes), in the group, in the
+  community channel and in private chats, without each handler having to
+  remember.
+- One exemption, on purpose: MyStorage (STORAGE_CHANNEL). Those posts hold the
+  original files, so deleting them would empty the catalogue. Admin chats are
+  swept like everybody else; set DELETE_ADMIN_MESSAGES=false if the pending
+  request list should survive longer than 10 minutes.
+- The pinned group rules are also exempt - core.pin_group_rules drops their
+  booking straight after posting, so the rules stay on top.
 - A handler that books a shorter timer (for example the 60-second group timer
   notice) still wins, because its own add_message call runs after the send.
 

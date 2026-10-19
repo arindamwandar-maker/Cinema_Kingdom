@@ -203,16 +203,17 @@ class Config:
         30,
         _safe_int(
             os.getenv("AUTO_DELETE_TIME"),
-            300
+            600
         )
     )
 
-    # The bot deletes every message it sends after AUTO_DELETE_TIME. Admin
-    # chats are kept unless this is true, so a pending-request list does not
-    # vanish before someone presses a button. MyStorage is never deleted.
+    # The bot deletes every message it sends after AUTO_DELETE_TIME, in the
+    # group, in the channel and in private chats. MyStorage stays untouched -
+    # those posts hold the original files. Only switch this off if the pending
+    # request lists disappearing after 10 minutes bothers the admins.
     DELETE_ADMIN_MESSAGES = os.getenv(
         "DELETE_ADMIN_MESSAGES",
-        "false"
+        "true"
     ).strip().lower() in ("1", "true", "yes", "on")
 
     COOLDOWN_TIME = max(
@@ -351,17 +352,46 @@ Movie search is available only inside the Cinema Kingdom group.
 
 Choose an option using the buttons below.
 
-⏳ Download links, movie files and temporary messages are removed after 5 minutes.
+⏳ Download links, movie files and temporary messages are removed after 10 minutes.
 """
 
     GROUP_WELCOME_MSG = """Hi {first_name} 👋
 
 Welcome To {group_name}
-Here you can download your favourite movies."""
+Here you can download your favourite movies.
+
+🌍 Tap your country below - it decides which movies we upload for you."""
 
     # Shown under the welcome message only when SUPER_ADMIN_USERNAME is set,
     # so the bot never prints an empty @.
     GROUP_WELCOME_ADMIN_LINE = "👑 Want to work with us? Pin @{admin_username}"
+
+    # Pinned at the top of Cinema Kingdom 3.0 and the Community channel on every
+    # boot. The bot edits its own old pinned post instead of posting a new one,
+    # and this message is the only thing the 10 minute sweep never deletes.
+    # Put your own wording in GROUP_RULES_MSG in the .env file to replace it.
+    GROUP_RULES_MSG = os.getenv("GROUP_RULES_MSG", """🎬 <b>Cinema Kingdom Rules</b>
+━━━━━━━━━━━━━━━━━━━
+
+📌 <b>Read before posting</b>
+
+1️⃣ Text messages only. Photos, videos, files and stickers are deleted.
+2️⃣ No links, no channel or group promotion, no invitations.
+3️⃣ One message every minute. Slow down before the next one.
+4️⃣ Abuse, spam or adult content is not allowed.
+5️⃣ Ask for a movie with /request Movie Name - Year - Language - Quality.
+6️⃣ First violation is a warning kick, the second one is a ban.
+7️⃣ Admin decisions are final. Respect every member.
+
+🤍 Enjoy the movies and share nothing but good vibes."""
+).strip()
+
+    # The bold highlight printed on every delivered movie file. Set it to an
+    # empty value to drop the line.
+    FILE_CAPTION_BADGE = os.getenv(
+        "FILE_CAPTION_BADGE",
+        "No Theatre Print 🚫 • Only FHD Files 📀"
+    ).strip()
 
     # Printed on every delivered movie file, above the group links.
     FILE_CAPTION_NOTE = os.getenv(
@@ -388,8 +418,12 @@ arrives after you clear the short link.
 🌐 <b>Your language</b>
 <code>/language</code> sets the language the bot answers you in.
 
+🌍 <b>Your country</b>
+<code>/country</code> tells us which country's movies to upload next.
+<code>/number</code> is optional - it shares your number with our admins only.
+
 ⏱ <b>Clean chats</b>
-Bot messages disappear by themselves after 5 minutes, so nothing piles up.
+Bot messages disappear by themselves after 10 minutes, so nothing piles up.
 
 ⚠️ <b>Please note</b>
 Share only what you download, keep the group free of other links.

@@ -54,6 +54,8 @@ class GoogleSheetService:
         'Solved Time',
     ]
 
+    # Country and Mobile sit at the end on purpose: rows already in his sheet
+    # keep their column positions.
     MEMBER_HEADERS = [
         'User ID',
         'Username',
@@ -62,6 +64,8 @@ class GoogleSheetService:
         'Join Date',
         'Last Active',
         'Total Requests',
+        'Country',
+        'Mobile',
     ]
 
     def __init__(self, config):
@@ -197,31 +201,74 @@ class GoogleSheetService:
             return False
 
     def add_group_members(self, members) -> int:
-        """Append Group Members rows nobody has written yet.
+        """Write Group Members rows and refresh the Country / Mobile columns.
 
         The bot cannot read a group's member list from Telegram, so this sheet
-        grows from the joins and requests the bot actually sees.
+        grows from the joins and requests the bot actually sees. Country and
+        Mobile live in columns H and I, and only those two cells of an existing
+        row are ever touched, so columns he adds himself stay alone.
         """
         worksheet = self.get_or_create_worksheet('Group Members', self.MEMBER_HEADERS)
         if worksheet is None:
             return 0
 
         try:
-            known = {str(value).strip() for value in worksheet.col_values(1)}
-            added = 0
-
-            for row in members:
-                user_id = str(row[0]).strip()
-                if not user_id or user_id in known:
-                    continue
-                worksheet.append_row(list(row), value_input_option='USER_ENTERED')
-                known.add(user_id)
-                added += 1
-
-            return added
+            width = self._column_letter(len(self.MEMBER_HEADERS))
+            stored_rows = worksheet.get_values(f'A1:{width}{max(worksheet.row_count, 1)}')
         except Exception as exc:
-            logging.exception('Group Members sheet error: %s', exc)
+            logging.exception('Group Members sheet read error: %s', exc)
             return 0
+
+        known = {}
+        for row_number, stored in enumerate(stored_rows, start=1):
+            user_id = str(stored[0]).strip() if stored else ''
+            if user_id and user_id not in known:
+                known[user_id] = row_number
+
+        added = 0
+
+        for row in members:
+            user_id = str(row[0]).strip()
+            if not user_id:
+                continue
+
+            country = str(row[7]) if len(row) > 7 and row[7] else ''
+            mobile = str(row[8]) if len(row) > 8 and row[8] else ''
+
+            if user_id in known:
+                row_number = known[user_id]
+                stored = stored_rows[row_number - 1]
+                old_country = str(stored[7]) if len(stored) > 7 and stored[7] else ''
+                old_mobile = str(stored[8]) if len(stored) > 8 and stored[8] else ''
+
+                # A member who has not shared anything yet must not blank the
+                # cells the bot learned earlier.
+                new_country = country or old_country
+                new_mobile = mobile or old_mobile
+
+                if (new_country, new_mobile) == (old_country, old_mobile):
+                    continue
+
+                try:
+                    worksheet.update(
+                        range_name=f'H{row_number}:I{row_number}',
+                        values=[[new_country, new_mobile]],
+                        value_input_option='RAW',
+                    )
+                except Exception as exc:
+                    logging.info('Group Members row %s not refreshed: %s', row_number, exc)
+                continue
+
+            try:
+                worksheet.append_row(list(row), value_input_option='USER_ENTERED')
+            except Exception as exc:
+                logging.info('Group Members row not appended for %s: %s', user_id, exc)
+                continue
+
+            known[user_id] = len(stored_rows) + added + 1
+            added += 1
+
+        return added
 
     def add_storage_upload(
         self,

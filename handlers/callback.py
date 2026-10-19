@@ -12,6 +12,7 @@ from config import Config
 from database import Database
 from keyboards import Keyboards
 from handlers.search import render_search_results
+from handlers.country import CountryHandler
 from handlers.language import LanguageHandler
 from services.community import render_request_reminder
 from services.force_join import ForceJoinService
@@ -61,6 +62,11 @@ class CallbackHandler:
         )
 
         self.language = LanguageHandler(
+            db,
+            config
+        )
+
+        self.country = CountryHandler(
             db,
             config
         )
@@ -212,6 +218,16 @@ class CallbackHandler:
         if data.startswith("lang_"):
 
             await self.language.save(
+                query,
+                context,
+                data
+            )
+
+            return
+
+        if data.startswith("country_"):
+
+            await self.country.save(
                 query,
                 context,
                 data

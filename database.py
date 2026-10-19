@@ -54,7 +54,7 @@ class Database:
         cur.execute('''CREATE TABLE IF NOT EXISTS users(
             user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT,
             join_date TEXT, last_active TEXT, total_requests INTEGER DEFAULT 0,
-            language TEXT DEFAULT 'en'
+            language TEXT DEFAULT 'en', country TEXT DEFAULT '', phone_number TEXT DEFAULT ''
         )''')
         cur.execute('''CREATE TABLE IF NOT EXISTS requests(
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, movie_title TEXT,
@@ -63,7 +63,11 @@ class Database:
             year TEXT DEFAULT '', audio_language TEXT DEFAULT '', resolution TEXT DEFAULT ''
         )''')
         self._add_missing_columns(cur, {
-            'users': {'language': "TEXT DEFAULT 'en'"},
+            'users': {
+                'language': "TEXT DEFAULT 'en'",
+                'country': "TEXT DEFAULT ''",
+                'phone_number': "TEXT DEFAULT ''",
+            },
             'requests': {
                 'year': "TEXT DEFAULT ''",
                 'audio_language': "TEXT DEFAULT ''",
@@ -97,6 +101,9 @@ class Database:
             user_id INTEGER,
             username TEXT,
             event_time TEXT NOT NULL
+        )''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS settings(
+            key TEXT PRIMARY KEY, value TEXT
         )''')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_movie_title ON movies(title)')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_movie_tags ON movies(tags)')
@@ -137,6 +144,20 @@ class Database:
 
     def get_admin_ids(self) -> List[int]:
         return [int(row[0]) for row in self.conn.execute('SELECT user_id FROM bot_admins').fetchall()]
+
+    def get_setting(self, key: str, default: str = '') -> str:
+        row = self.conn.execute(
+            'SELECT value FROM settings WHERE key=?', (key,)
+        ).fetchone()
+        if row is None or row['value'] is None:
+            return default
+        return str(row['value']) or default
+
+    def set_setting(self, key: str, value: str):
+        self.conn.execute(
+            'INSERT OR REPLACE INTO settings(key, value) VALUES(?,?)', (key, str(value))
+        )
+        self.conn.commit()
 
     def is_admin(self, user_id: int, config_admin_ids=None) -> bool:
         if config_admin_ids and user_id in config_admin_ids:
@@ -285,6 +306,41 @@ class Database:
         ).fetchone()
         return (row['language'] if row and row['language'] else 'en')
 
+    def set_user_country(self, user_id: int, country: str):
+        self.conn.execute(
+            'UPDATE users SET country=? WHERE user_id=?', (country, user_id)
+        )
+        self.conn.commit()
+
+    def set_user_phone(self, user_id: int, phone_number: str, country: str = ''):
+        """Store a number the member shared on purpose.
+
+        A blank country from the dialling code leaves whatever they picked in
+        the picker, because guessing is worse than their own answer.
+        """
+        self.conn.execute(
+            'UPDATE users SET phone_number=?, country=CASE WHEN ?=\'\' THEN country ELSE ? END '
+            'WHERE user_id=?',
+            (phone_number, country, country, user_id)
+        )
+        self.conn.commit()
+
+    def get_user_profile(self, user_id: int) -> Optional[Dict]:
+        row = self.conn.execute(
+            'SELECT user_id, username, first_name, last_name, language, country, phone_number '
+            'FROM users WHERE user_id=?', (user_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def country_counts(self) -> List[Dict]:
+        """How many members asked for each country's cinema."""
+        rows = self.conn.execute('''
+            SELECT country, COUNT(*) AS total FROM users
+            WHERE country IS NOT NULL AND TRIM(country)<>''
+            GROUP BY country ORDER BY total DESC, country
+        ''').fetchall()
+        return [dict(row) for row in rows]
+
     def add_request(self, user_id: int, movie_title: str, description: str = '',
                     year: str = '', audio_language: str = '', resolution: str = '') -> int:
         cur = self.conn.cursor()
@@ -329,7 +385,7 @@ class Database:
     def get_users(self) -> List[Dict]:
         rows = self.conn.execute('''
             SELECT user_id, username, first_name, last_name, join_date,
-                   last_active, total_requests
+                   last_active, total_requests, country, phone_number
             FROM users ORDER BY user_id
         ''').fetchall()
         return [dict(row) for row in rows]

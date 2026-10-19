@@ -8,6 +8,7 @@ from telegram.constants import ParseMode
 from config import Config
 from database import Database
 from keyboards import Keyboards
+from services.countries import country_name
 from services.google_sheet import GoogleSheetService
 
 MAX_REQUESTS_PER_REMINDER = 25
@@ -150,6 +151,8 @@ class CommunityService:
                 self.format_date(user.get('join_date')),
                 self.format_date(user.get('last_active')),
                 user.get('total_requests') or 0,
+                country_name(user.get('country') or ''),
+                user.get('phone_number') or '',
             ])
 
         return rows

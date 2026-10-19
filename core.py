@@ -6,6 +6,8 @@ from telegram import (
     BotCommandScopeChat,
     ChatPermissions,
 )
+from telegram.constants import ParseMode
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -177,6 +179,81 @@ class CinemaKingdomCore:
         """Startup work every boot path has to run."""
         await self.register_command_menu(application)
         await self.apply_group_privacy(application)
+        await self.pin_group_rules(application)
+
+    async def pin_group_rules(self, application):
+        """Keep the house rules pinned in the group and the channel.
+
+        Telegram only lets one message stay per chat, so the bot remembers the
+        message id and edits that post on the next boot instead of filling the
+        chat with copies. The tracking row is dropped straight away - the pinned
+        rules must survive the 10 minute sweep.
+        """
+        text = (self.config.GROUP_RULES_MSG or '').strip()
+        if not text:
+            return
+
+        targets = [
+            (chat_id, label)
+            for chat_id, label in (
+                (self.config.GROUP_ID, self.config.GROUP_NAME),
+                (self.config.CHANNEL_ID, self.config.CHANNEL_NAME),
+            )
+            if chat_id
+        ]
+
+        for chat_id, label in targets:
+            key = f'pinned_rules:{chat_id}'
+            message_id = None
+
+            stored = self.db.get_setting(key)
+            if stored:
+                try:
+                    edited = await application.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=int(stored),
+                        text=text,
+                        parse_mode=ParseMode.HTML,
+                    )
+                    message_id = edited.message_id
+                except BadRequest as exc:
+                    if 'not modified' in str(exc).lower():
+                        message_id = int(stored)
+                    else:
+                        logging.info('Pinned rules in %s need a new post: %s', label, exc)
+                except Exception as exc:
+                    logging.info('Pinned rules in %s need a new post: %s', label, exc)
+
+            if message_id is None:
+                try:
+                    sent = await application.bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        parse_mode=ParseMode.HTML,
+                    )
+                except Exception as exc:
+                    logging.warning(
+                        'Rules not posted in %s - the bot must be an admin there: %s',
+                        label, exc
+                    )
+                    continue
+
+                message_id = sent.message_id
+                self.db.remove_message(chat_id, message_id)
+                self.db.set_setting(key, message_id)
+
+            try:
+                await application.bot.pin_chat_message(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    disable_notification=False,
+                )
+            except Exception as exc:
+                logging.warning(
+                    'Rules not pinned in %s - the bot needs the Pin Messages '
+                    'permission: %s',
+                    label, exc
+                )
 
     async def apply_group_privacy(self, application):
         """Lock the group down: text only, no invites, no pinning.
@@ -233,6 +310,8 @@ class CinemaKingdomCore:
                     BotCommand("help", "How to download a movie"),
                     BotCommand("request", "Request a movie: /request Name - Year - Language - Quality"),
                     BotCommand("language", "Choose the language the bot answers in"),
+                    BotCommand("country", "Tell us your country so we upload its movies"),
+                    BotCommand("number", "Share your number with our admins"),
                 ],
                 None,
                 "Bot",
@@ -310,6 +389,29 @@ class CinemaKingdomCore:
             CommandHandler(
                 "language",
                 self.language_handler.menu
+            )
+        )
+
+        app.add_handler(
+            CommandHandler(
+                "country",
+                self.start_handler.country.menu
+            )
+        )
+
+        app.add_handler(
+            CommandHandler(
+                ("number", "mobile"),
+                self.start_handler.country.ask_number
+            )
+        )
+
+        # Only a contact the member offers on purpose reaches Telegram, so this
+        # is the single way the number column ever gets filled.
+        app.add_handler(
+            MessageHandler(
+                filters.ChatType.PRIVATE & filters.CONTACT,
+                self.start_handler.country.handle_contact
             )
         )
 

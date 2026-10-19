@@ -10,37 +10,77 @@ from services.i18n import t
 
 class Keyboards:
 
+    # handlers/search.py matches these exact strings, so keep them in sync.
+    MENU_ROWS = [
+        ["🎬 Search Movie"],
+        ["🎥 Request Movie"],
+        ["📢 Join Channel", "👥 Join Group"],
+        ["ℹ️ Help"],
+    ]
+
     @staticmethod
-    def main_menu():
+    def reply_rows(rows):
+        return [[KeyboardButton(label) for label in row] for row in rows]
+
+    @classmethod
+    def main_menu(cls):
         return ReplyKeyboardMarkup(
-            [
-                [
-                    KeyboardButton(
-                        "🎬 Search Movie"
-                    )
-                ],
-                [
-                    KeyboardButton(
-                        "🎥 Request Movie"
-                    )
-                ],
-                [
-                    KeyboardButton(
-                        "📢 Join Channel"
-                    ),
-                    KeyboardButton(
-                        "👥 Join Group"
-                    )
-                ],
-                [
-                    KeyboardButton(
-                        "ℹ️ Help"
-                    )
-                ]
-            ],
+            cls.reply_rows(cls.MENU_ROWS),
             resize_keyboard=True,
             is_persistent=True
         )
+
+    @classmethod
+    def contact_menu(cls, code: str = 'en'):
+        """Ask for the number, then the usual menu stays underneath it."""
+        rows = [
+            [
+                KeyboardButton(
+                    cls.button_label(t(code, 'share_number')),
+                    request_contact=True
+                )
+            ]
+        ]
+        rows += cls.reply_rows(cls.MENU_ROWS)
+
+        return ReplyKeyboardMarkup(
+            rows,
+            resize_keyboard=True,
+            is_persistent=True
+        )
+
+    @staticmethod
+    def inline(text, callback_data):
+        return InlineKeyboardButton(
+            Keyboards.button_label(text),
+            callback_data=callback_data
+        )
+
+    @staticmethod
+    def inline_markup(rows):
+        return InlineKeyboardMarkup(rows)
+
+    @staticmethod
+    def profile_links(bot_username: str, code: str = 'en'):
+        """Group welcome buttons: they open the bot privately."""
+        username = (bot_username or '').replace('@', '')
+        if not username:
+            return None
+
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    Keyboards.button_label(t(code, 'select_country')),
+                    url=f"https://t.me/{username}?start=country"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    Keyboards.button_label(t(code, 'share_number')),
+                    url=f"https://t.me/{username}?start=share_number"
+                )
+            ]
+        ])
 
     @staticmethod
     def format_size(size):

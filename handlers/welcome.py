@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from config import Config
 from database import Database
+from keyboards import Keyboards
 
 
 class WelcomeHandler:
@@ -53,6 +54,10 @@ class WelcomeHandler:
                 await message.reply_text(
                     self.welcome_text(user),
                     parse_mode=ParseMode.HTML,
+                    reply_markup=Keyboards.profile_links(
+                        self.config.BOT_USERNAME,
+                        self.db.get_user_language(user.id)
+                    ),
                 )
             except Exception as exc:
                 logging.info('Welcome message not sent to %s: %s', user.id, exc)
