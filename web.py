@@ -13,6 +13,7 @@ import asyncio
 import concurrent.futures
 import hmac
 import logging
+import os
 import threading
 import time
 
@@ -159,11 +160,51 @@ if not CONFIG.WEBHOOK_SECRET_TOKEN:
     )
 
 
+_CODE_VERSION = None
+
+
+def code_version():
+    """The commit this process booted from, read straight out of .git.
+
+    /healthz showing 74307ab is how we tell a "git pull + Reload" actually
+    landed, instead of guessing from behaviour.
+    """
+    global _CODE_VERSION
+
+    if _CODE_VERSION is not None:
+        return _CODE_VERSION
+
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.git')
+    try:
+        head = open(os.path.join(root, 'HEAD'), encoding='utf-8').read().strip()
+        if head.startswith('ref:'):
+            ref = head.split('ref:', 1)[1].strip()
+            path = os.path.join(root, *ref.split('/'))
+            if os.path.exists(path):
+                commit = open(path, encoding='utf-8').read().strip()
+            else:
+                commit = ''
+                for line in open(os.path.join(root, 'packed-refs'), encoding='utf-8'):
+                    if line.strip().endswith(ref):
+                        commit = line.split()[0]
+                        break
+        else:
+            commit = head
+
+        _CODE_VERSION = commit[:7] or None
+    except Exception as exc:
+        logging.info('Running commit not readable: %s', exc)
+        _CODE_VERSION = None
+
+    return _CODE_VERSION
+
+
 @app.route("/healthz")
 def healthz():
     return jsonify(
         {
             "ready": runner.ready,
+            "commit": code_version(),
             "uptime_seconds": (
                 round(time.time() - runner.started_at, 1)
                 if runner.started_at
