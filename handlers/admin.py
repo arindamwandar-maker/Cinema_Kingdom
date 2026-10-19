@@ -1,5 +1,7 @@
 import html
+import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -7,6 +9,7 @@ from telegram.ext import ContextTypes
 
 from config import Config
 from database import Database
+from services.community import render_request_reminder
 from services.google_sheet import GoogleSheetService
 from services.shortener import ShortenerService
 
@@ -29,6 +32,11 @@ class AdminHandler:
 
     def is_super_admin(self, user_id: int) -> bool:
         return user_id == self.config.SUPER_ADMIN_ID
+
+    def local_time(self) -> str:
+        return datetime.now(
+            ZoneInfo(self.config.LOCAL_TIMEZONE)
+        ).strftime('%Y-%m-%d %I:%M:%S %p')
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user, message = update.effective_user, update.effective_message
@@ -67,17 +75,77 @@ class AdminHandler:
             await message.reply_text(text, parse_mode=ParseMode.HTML)
 
     async def requests(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """The pending list with a Solved button per request.
+
+        Typed in a group it answers privately, so users never see the admin
+        tooling; a DM gets the list straight away. /pending is the same thing.
+        """
         user, message = update.effective_user, update.effective_message
         if not user or not message or not self.is_admin(user.id):
             return
+
         rows = self.db.get_pending_requests()
-        if not rows:
-            await message.reply_text('✅ No pending movie requests.')
+
+        if rows:
+            text, keyboard = render_request_reminder(rows)
+        else:
+            text = (
+                '🎬 <b>Cinema Kingdom</b>\n'
+                '━━━━━━━━━━━━━━━━━━━\n'
+                '✅ <b>No pending movie requests</b>\n\n'
+                'Nobody is waiting for a movie right now.'
+            )
+            keyboard = None
+
+        try:
+            await context.bot.send_message(
+                chat_id=user.id,
+                text=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
+            )
+        except Exception:
+            # The admin never opened /start, so a DM is impossible.
+            await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    async def member_counts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """How big each of our chats is - reported only to the admin who asked."""
+        user, message = update.effective_user, update.effective_message
+        if not user or not message or not self.is_admin(user.id):
             return
-        text = '🎬 <b>Pending Requests</b>\n\n'
-        for req in rows[:20]:
-            text += f"🆔 #{req['id']}\n👤 {html.escape(req.get('first_name') or 'Unknown')}\n🎥 {html.escape(req['movie_title'])}\n\n"
-        await message.reply_text(text, parse_mode=ParseMode.HTML)
+
+        chats = (
+            ('👥', self.config.GROUP_NAME, self.config.GROUP_ID),
+            ('📢', self.config.CHANNEL_NAME, self.config.CHANNEL_ID),
+            ('🗄', 'My Storage', self.config.STORAGE_CHANNEL),
+        )
+
+        lines = ['🎬 <b>Cinema Kingdom</b>', '━━━━━━━━━━━━━━━━━━━', '👥 <b>Members</b>', '']
+
+        for emoji, label, chat_id in chats:
+            if not chat_id:
+                continue
+            try:
+                count = await context.bot.get_chat_member_count(chat_id)
+                lines.append(f'{emoji} <b>{html.escape(label)}</b> — <b>{count}</b> members')
+            except Exception as exc:
+                lines.append(
+                    f'{emoji} <b>{html.escape(label)}</b> — not visible '
+                    '(the bot must be a member/admin of that chat)'
+                )
+                logging.info('Member count unavailable for %s: %s', chat_id, exc)
+
+        lines += ['', f'🕒 {self.local_time()}']
+        text = '\n'.join(lines)
+
+        try:
+            await context.bot.send_message(
+                chat_id=user.id,
+                text=text,
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            await message.reply_text(text, parse_mode=ParseMode.HTML)
 
     async def broadcast(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user, message = update.effective_user, update.effective_message

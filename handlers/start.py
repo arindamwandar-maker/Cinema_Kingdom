@@ -11,6 +11,7 @@ from database import Database
 from keyboards import Keyboards
 from services.force_join import ForceJoinService
 from services.google_sheet import GoogleSheetService
+from services.i18n import t
 from services.token_manager import TokenManager
 
 
@@ -30,12 +31,14 @@ class StartHandler:
             f'{prefix}{html.escape(label)}</a>'
         )
 
-    def delivery_caption(self, title: str) -> str:
+    def delivery_caption(self, title: str, code: str = 'en') -> str:
         """Caption shipped with the movie file: title, note and our links."""
         lines = [
+            t(code, 'brand'),
+            '━━━━━━━━━━━━━━━━━━━',
             f'🎬 <b>{html.escape(title)}</b>',
             '',
-            '✅ File delivered. Enjoy watching!',
+            t(code, 'delivered'),
             '',
         ]
 
@@ -51,6 +54,12 @@ class StartHandler:
 
         return '\n'.join(lines)
 
+    def code_for(self, user) -> str:
+        """The language this user picked, English until they pick one."""
+        if not user:
+            return 'en'
+        return self.db.get_user_language(user.id)
+
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.effective_message
         user = update.effective_user
@@ -58,6 +67,7 @@ class StartHandler:
             return
 
         self.db.add_or_update_user(user.id, user.username or '', user.first_name or '', user.last_name or '')
+        code = self.code_for(user)
 
         if context.args:
             payload = context.args[0]
@@ -70,11 +80,11 @@ class StartHandler:
                 try:
                     movie_id = int(payload.split('_', 1)[1])
                 except ValueError:
-                    await message.reply_text('❌ Invalid movie link.')
+                    await message.reply_text(t(code, 'invalid_link'), parse_mode=ParseMode.HTML)
                     return
                 movie = self.db.get_movie(movie_id)
                 if not movie:
-                    await message.reply_text('❌ Movie not found or deleted.')
+                    await message.reply_text(t(code, 'not_found'), parse_mode=ParseMode.HTML)
                     return
                 self.db.increment_views(movie_id)
                 await self.send_movie_message(update, movie)
@@ -83,7 +93,10 @@ class StartHandler:
             # A secure shortener return token delivers the file.
             movie_id = self.token_manager.verify_token(payload)
             if movie_id is None:
-                sent = await message.reply_text('❌ This download link expired or is invalid. Generate a new link.')
+                sent = await message.reply_text(
+                    t(code, 'link_expired'),
+                    parse_mode=ParseMode.HTML,
+                )
                 self.db.add_message(sent.chat.id, sent.message_id, seconds=self.config.AUTO_DELETE_TIME)
                 self.sheet.log_download_status(
                     status='Link Expired',
@@ -98,7 +111,7 @@ class StartHandler:
             movie = self.db.get_movie(movie_id)
             self.token_manager.remove_token(payload)
             if not movie:
-                await message.reply_text('❌ Movie not found or deleted.')
+                await message.reply_text(t(code, 'not_found'), parse_mode=ParseMode.HTML)
                 return
 
             self.db.increment_downloads(movie_id)
@@ -130,7 +143,7 @@ class StartHandler:
             )
             sent = await message.reply_document(
                 document=movie['file_id'],
-                caption=self.delivery_caption(movie['title']),
+                caption=self.delivery_caption(movie['title'], code),
                 parse_mode=ParseMode.HTML,
             )
             self.db.add_message(sent.chat.id, sent.message_id, movie_id, self.config.AUTO_DELETE_TIME)
@@ -157,6 +170,7 @@ class StartHandler:
         if not message:
             return
 
+        code = self.code_for(user)
         reason = ""
 
         if (
@@ -167,9 +181,13 @@ class StartHandler:
             reason = f"\n\n<i>{html.escape(self.force_join.last_reason)}</i>"
 
         await message.reply_text(
-            "🔒 <b>Access Restricted</b>\n\nJoin the official channel and community group first, then press <b>I've Joined</b>." + reason,
+            f'{t(code, "access_title")}\n\n{t(code, "access_line")}' + reason,
             parse_mode=ParseMode.HTML,
-            reply_markup=Keyboards.force_join_menu(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME),
+            reply_markup=Keyboards.force_join_menu(
+                self.config.CHANNEL_USERNAME,
+                self.config.GROUP_USERNAME,
+                code,
+            ),
         )
 
     async def send_movie_message(self, update: Update, movie: dict):
@@ -177,22 +195,29 @@ class StartHandler:
         if not message:
             return
 
-        lines = [f"🎬 <b>{html.escape(movie['title'])}</b>", '']
+        code = self.code_for(update.effective_user)
+
+        lines = [
+            t(code, 'brand'),
+            '━━━━━━━━━━━━━━━━━━━',
+            f"🎬 <b>{html.escape(movie['title'])}</b>",
+            '',
+        ]
         uploader = (movie.get('uploaded_by_name') or '').strip()
 
         if uploader:
-            lines.append(f'📤 Uploaded by: {html.escape(uploader)}')
+            lines.append(f'{t(code, "uploader")}: {html.escape(uploader)}')
 
         lines.extend([
             '',
-            'Click below to generate the download link.',
+            t(code, 'movie_hint'),
             '',
-            '⏳ Link validity: 5 minutes.',
+            t(code, 'validity'),
         ])
 
         sent = await message.reply_text(
             '\n'.join(lines),
             parse_mode=ParseMode.HTML,
-            reply_markup=Keyboards.movie_button(movie['id']),
+            reply_markup=Keyboards.movie_button(movie['id'], code),
         )
         self.db.add_message(sent.chat.id, sent.message_id, movie['id'], self.config.AUTO_DELETE_TIME)

@@ -7,6 +7,7 @@ from telegram.ext import ApplicationHandlerStop, ContextTypes
 
 from config import Config
 from database import Database
+from services.i18n import t
 
 
 class ModerationHandler:
@@ -36,7 +37,7 @@ class ModerationHandler:
         except Exception as exc:
             logging.info('Message could not be deleted: %s', exc)
 
-    async def punish(self, context, chat, user, message, reason):
+    async def punish(self, context, chat, user, message, reason_key):
         """Delete an unwanted message, then remove the sender from the group.
 
         A first violation inside the window is only a kick; once the member
@@ -44,6 +45,7 @@ class ModerationHandler:
         """
         await self.delete_quietly(message)
 
+        code = self.db.get_user_language(user.id)
         strikes = self.db.add_offense(user.id, self.config.GROUP_OFFENCE_WINDOW)
         banned = strikes >= self.config.GROUP_BAN_STRIKES
 
@@ -61,21 +63,20 @@ class ModerationHandler:
             logging.warning('Could not remove %s: %s', user.id, exc)
 
         if banned:
-            status = '🔒 Banned from the group'
+            status = '🔒'
         elif removed:
-            left = self.config.GROUP_BAN_STRIKES - strikes
-            status = f'🚪 Removed. {left} more violation and you are banned.'
+            status = f'🚪 −{self.config.GROUP_BAN_STRIKES - strikes}'
         else:
-            status = 'Message deleted'
+            status = '🗑'
 
+        # Emoji only besides the rule text, so the notice reads in any language.
         notice = await context.bot.send_message(
             chat_id=chat.id,
             text=(
-                '🚫 <b>Group Rule</b>\n\n'
-                f'{reason}\n\n'
-                f'User: {user.mention_html()}\n'
-                f'Strikes: {strikes}/{self.config.GROUP_BAN_STRIKES}\n'
-                f'Status: {status}'
+                f'{t(code, "rule_title")}\n\n'
+                f'{t(code, reason_key)}\n\n'
+                f'👤 {user.mention_html()}\n'
+                f'⚠️ {strikes}/{self.config.GROUP_BAN_STRIKES}  {status}'
             ),
             parse_mode=ParseMode.HTML,
         )
@@ -95,13 +96,7 @@ class ModerationHandler:
         admin = self.db.is_admin(user.id, self.config.ADMIN_IDS)
 
         if not admin and self.config.GROUP_BLOCK_ATTACHMENTS and self.has_attachment(message):
-            await self.punish(
-                context,
-                chat,
-                user,
-                message,
-                'Attachments (files, videos, music, photos, stickers) are not allowed here.'
-            )
+            await self.punish(context, chat, user, message, 'rule_attachment')
 
         # The one message per interval applies to everyone, admins included.
         # Commands are exempt so an admin can still run /sendgroup in a busy hour.
@@ -111,12 +106,17 @@ class ModerationHandler:
                 remain = self.db.group_timer_remaining(user.id, interval)
                 await self.delete_quietly(message)
 
+                code = self.db.get_user_language(user.id)
                 notice = await context.bot.send_message(
                     chat_id=chat.id,
                     text=(
-                        '⏳ <b>Message Timer</b>\n\n'
-                        f'{user.mention_html()}, you can send the next message '
-                        f'after <b>{remain} seconds</b>.'
+                        f'{t(code, "timer")}\n\n'
+                        + t(
+                            code,
+                            'timer_line',
+                            user=user.mention_html(),
+                            seconds=remain,
+                        )
                     ),
                     parse_mode=ParseMode.HTML,
                 )
@@ -145,10 +145,4 @@ class ModerationHandler:
         if not violation:
             return
 
-        await self.punish(
-            context,
-            chat,
-            user,
-            message,
-            'Links and channel promotion are not allowed here.'
-        )
+        await self.punish(context, chat, user, message, 'rule_link')

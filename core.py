@@ -19,13 +19,14 @@ from config import Config
 from database import Database
 from handlers.admin import AdminHandler
 from handlers.callback import CallbackHandler
+from handlers.language import LanguageHandler
 from handlers.moderation import ModerationHandler
 from handlers.request import RequestHandler
 from handlers.search import SearchHandler
 from handlers.start import StartHandler
 from handlers.storage_handler import StorageHandler
 from handlers.welcome import WelcomeHandler
-from services.auto_delete import AutoDeleteService
+from services.auto_delete import AutoDeleteBot, AutoDeleteService
 from services.community import CommunityService
 from services.promotion import PromotionService
 from services.sheet_sync import SheetSyncService
@@ -58,7 +59,13 @@ class CinemaKingdomCore:
 
         self.application = (
             Application.builder()
-            .token(self.config.BOT_TOKEN)
+            .bot(
+                AutoDeleteBot(
+                    token=self.config.BOT_TOKEN,
+                    db=self.db,
+                    config=self.config,
+                )
+            )
             .post_init(self.prepare_bot)
             .build()
         )
@@ -79,6 +86,11 @@ class CinemaKingdomCore:
         )
 
         self.request_handler = RequestHandler(
+            self.db,
+            self.config
+        )
+
+        self.language_handler = LanguageHandler(
             self.db,
             self.config
         )
@@ -132,7 +144,9 @@ class CinemaKingdomCore:
 
     ADMIN_COMMANDS = [
         BotCommand("stats", "Bot statistics"),
-        BotCommand("requests", "Pending movie requests"),
+        BotCommand("pending", "Pending requests with Solved buttons"),
+        BotCommand("requests", "Same as /pending"),
+        BotCommand("members", "Member count of every chat, sent to you"),
         BotCommand("rn", "Rename a movie: /rn MovieID New Name"),
         BotCommand("del", "Delete a movie: /del MovieID"),
         BotCommand("rst", "Restore a movie: /rst MovieID"),
@@ -154,6 +168,8 @@ class CinemaKingdomCore:
         BotCommand("del", "Delete a movie: /del MovieID"),
         BotCommand("rst", "Restore a movie: /rst MovieID"),
         BotCommand("stats", "Bot statistics"),
+        BotCommand("pending", "Pending requests with Solved buttons"),
+        BotCommand("members", "Member count of every chat, sent to you"),
         BotCommand("syncnames", "Apply names edited in the Google Sheet"),
     ]
 
@@ -215,7 +231,8 @@ class CinemaKingdomCore:
                 [
                     BotCommand("start", "Open the bot"),
                     BotCommand("help", "How to download a movie"),
-                    BotCommand("request", "Request a movie"),
+                    BotCommand("request", "Request a movie: /request Name - Year - Language - Quality"),
+                    BotCommand("language", "Choose the language the bot answers in"),
                 ],
                 None,
                 "Bot",
@@ -289,6 +306,13 @@ class CinemaKingdomCore:
             )
         )
 
+        app.add_handler(
+            CommandHandler(
+                "language",
+                self.language_handler.menu
+            )
+        )
+
         # =========================
         # ADMIN COMMANDS
         # =========================
@@ -302,8 +326,15 @@ class CinemaKingdomCore:
 
         app.add_handler(
             CommandHandler(
-                "requests",
+                ("requests", "pending"),
                 self.admin_handler.requests
+            )
+        )
+
+        app.add_handler(
+            CommandHandler(
+                ("members", "membercounts"),
+                self.admin_handler.member_counts
             )
         )
 

@@ -12,9 +12,11 @@ from config import Config
 from database import Database
 from keyboards import Keyboards
 from handlers.search import render_search_results
+from handlers.language import LanguageHandler
 from services.community import render_request_reminder
 from services.force_join import ForceJoinService
 from services.google_sheet import GoogleSheetService
+from services.i18n import t
 from services.shortener import ShortenerService
 from services.storage import StorageService
 from services.token_manager import TokenManager
@@ -58,6 +60,11 @@ class CallbackHandler:
             config
         )
 
+        self.language = LanguageHandler(
+            db,
+            config
+        )
+
     async def handle_callback(
         self,
         update: Update,
@@ -70,6 +77,7 @@ class CallbackHandler:
 
         data = query.data or ""
         user = query.from_user
+        code = self.db.get_user_language(user.id) if user else 'en'
 
         try:
             await query.answer()
@@ -147,8 +155,8 @@ class CallbackHandler:
             )
 
             await query.edit_message_text(
-                "🔞 This search is not available "
-                "for users under 18."
+                t(code, 'adult_blocked'),
+                parse_mode=ParseMode.HTML,
             )
 
             return
@@ -174,7 +182,8 @@ class CallbackHandler:
                 != expected_chat_id
             ):
                 await query.edit_message_text(
-                    "❌ This age confirmation has expired."
+                    t(code, 'expired_confirm'),
+                    parse_mode=ParseMode.HTML,
                 )
                 return
 
@@ -193,6 +202,16 @@ class CallbackHandler:
         if data.startswith("sp"):
 
             await self.change_search_page(
+                query,
+                context,
+                data
+            )
+
+            return
+
+        if data.startswith("lang_"):
+
+            await self.language.save(
                 query,
                 context,
                 data
@@ -243,16 +262,14 @@ class CallbackHandler:
                     )
 
                 await query.edit_message_text(
-                    "🔒 <b>Access Denied</b>\n\n"
-                    "Join the official channel and "
-                    "community group first.\n\n"
-                    "Then press <b>I've Joined</b>."
+                    f'{t(code, "access_title")}\n\n{t(code, "access_line")}'
                     + reason,
                     parse_mode=ParseMode.HTML,
                     reply_markup=(
                         Keyboards.force_join_menu(
                             self.config.CHANNEL_USERNAME,
-                            self.config.GROUP_USERNAME
+                            self.config.GROUP_USERNAME,
+                            code
                         )
                     )
                 )
@@ -278,7 +295,8 @@ class CallbackHandler:
                 IndexError
             ):
                 await query.edit_message_text(
-                    "❌ Invalid movie button."
+                    t(code, 'invalid_link'),
+                    parse_mode=ParseMode.HTML,
                 )
                 return
 
@@ -309,7 +327,8 @@ class CallbackHandler:
                 IndexError
             ):
                 await query.edit_message_text(
-                    "❌ Invalid movie button."
+                    t(code, 'invalid_link'),
+                    parse_mode=ParseMode.HTML,
                 )
                 return
 
@@ -334,19 +353,20 @@ class CallbackHandler:
             if joined:
 
                 await query.edit_message_text(
-                    "✅ Verification successful.\n\n"
-                    "Send /start again to continue."
+                    t(code, 'join_ok'),
+                    parse_mode=ParseMode.HTML,
                 )
 
             else:
 
                 await query.edit_message_text(
-                    "❌ You have not joined both "
-                    "the channel and group yet.",
+                    t(code, 'join_pending'),
+                    parse_mode=ParseMode.HTML,
                     reply_markup=(
                         Keyboards.force_join_menu(
                             self.config.CHANNEL_USERNAME,
-                            self.config.GROUP_USERNAME
+                            self.config.GROUP_USERNAME,
+                            code
                         )
                     )
                 )
@@ -361,6 +381,9 @@ class CallbackHandler:
     ):
         """Show another page of a search inside the same group message."""
         page_text, _, search_text = data[2:].partition("|")
+
+        user = query.from_user
+        code = self.db.get_user_language(user.id) if user else 'en'
 
         try:
             page = int(page_text)
@@ -379,8 +402,10 @@ class CallbackHandler:
         if not movies:
 
             await query.edit_message_text(
-                "❌ <b>This search has no results now.</b>\n\n"
-                f"🔎 <b>Search Query</b> — <code>{html.escape(search_text)}</code>",
+                f'{t(code, "brand")}\n'
+                '━━━━━━━━━━━━━━━━━━━\n'
+                f'{t(code, "no_results")}\n\n'
+                f'{t(code, "search_query")} — <code>{html.escape(search_text)}</code>',
                 parse_mode=ParseMode.HTML
             )
 
@@ -393,7 +418,8 @@ class CallbackHandler:
             movies,
             page,
             self.config.SEARCH_RESULTS_PER_PAGE,
-            bot_info.username or self.config.BOT_USERNAME
+            bot_info.username or self.config.BOT_USERNAME,
+            code=code
         )
 
         try:
@@ -536,11 +562,16 @@ class CallbackHandler:
             self.config.MAX_MOVIES_PER_SEARCH
         )
 
+        user = query.from_user
+        code = self.db.get_user_language(user.id) if user else 'en'
+
         if not movies:
 
             await query.edit_message_text(
-                "❌ <b>No movie found</b>\n\n"
-                f"🔎 <b>Search Query</b> — <code>{html.escape(text)}</code>",
+                f'{t(code, "brand")}\n'
+                '━━━━━━━━━━━━━━━━━━━\n'
+                f'{t(code, "no_results")}\n\n'
+                f'{t(code, "search_query")} — <code>{html.escape(text)}</code>',
                 parse_mode=ParseMode.HTML
             )
 
@@ -554,7 +585,8 @@ class CallbackHandler:
             1,
             self.config.SEARCH_RESULTS_PER_PAGE,
             bot_info.username or self.config.BOT_USERNAME,
-            heading='🔞 <b>18+ Search Result</b>'
+            heading=f'🔞 {t(code, "search_result")}',
+            code=code
         )
 
         try:
@@ -585,10 +617,14 @@ class CallbackHandler:
             movie_id
         )
 
+        user = query.from_user
+        code = self.db.get_user_language(user.id) if user else 'en'
+
         if not movie:
 
             await query.edit_message_text(
-                "❌ Movie not found or deleted."
+                t(code, 'not_found'),
+                parse_mode=ParseMode.HTML,
             )
 
             return
@@ -603,18 +639,20 @@ class CallbackHandler:
         )
 
         lines = [
-            "🎬 <b>Movie Information</b>",
-            "",
-            f"<b>Title:</b> {html.escape(updated_movie['title'])}",
-            f"<b>Size:</b> {self.format_size(updated_movie.get('file_size'))}",
-            f"<b>Views:</b> {updated_movie.get('views', 0)}",
-            f"<b>Downloads:</b> {updated_movie.get('downloads', 0)}",
+            t(code, 'brand'),
+            '━━━━━━━━━━━━━━━━━━━',
+            f"🎬 <b>{html.escape(updated_movie['title'])}</b>",
+            f"💾 <b>{self.format_size(updated_movie.get('file_size'))}</b>",
+            f"👁 <b>{updated_movie.get('views', 0)}</b>"
+            f" · ⬇️ <b>{updated_movie.get('downloads', 0)}</b>",
         ]
 
         uploader = (updated_movie.get('uploaded_by_name') or '').strip()
 
         if uploader:
-            lines.append(f"<b>Uploaded by:</b> {html.escape(uploader)}")
+            lines.append(
+                f'{t(code, "uploader")}: <b>{html.escape(uploader)}</b>'
+            )
 
         text = '\n'.join(lines)
 
@@ -622,7 +660,8 @@ class CallbackHandler:
             text,
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.movie_button(
-                movie_id
+                movie_id,
+                code
             )
         )
 
@@ -633,6 +672,7 @@ class CallbackHandler:
         context: ContextTypes.DEFAULT_TYPE
     ):
         user = query.from_user
+        code = self.db.get_user_language(user.id) if user else 'en'
 
         movie = self.db.get_movie(
             movie_id
@@ -641,7 +681,8 @@ class CallbackHandler:
         if not movie:
 
             await query.edit_message_text(
-                "❌ Movie not found or deleted."
+                t(code, 'not_found'),
+                parse_mode=ParseMode.HTML,
             )
 
             return
@@ -760,14 +801,11 @@ class CallbackHandler:
                 )
 
             await query.edit_message_text(
-                "🚫 <b>Download unavailable</b>\n\n"
-                "The download service is temporarily down, so this movie "
-                "cannot be sent right now.\n\n"
-                "🔁 Please try again in a few minutes."
-                + debug,
+                t(code, 'dl_unavailable') + debug,
                 parse_mode=ParseMode.HTML,
                 reply_markup=Keyboards.movie_button(
-                    movie_id
+                    movie_id,
+                    code
                 )
             )
 
@@ -775,11 +813,10 @@ class CallbackHandler:
 
         # The file leaves only through the token inside the shortener link, so
         # nobody can collect it without finishing the ad page first.
-        steps = (
-            "1️⃣ Press "
-            "<b>Click Here To Download Movie</b>.\n"
-            "2️⃣ Complete the page that opens.\n"
-            "3️⃣ The bot sends the movie file at once.\n"
+        steps = t(
+            code,
+            'steps',
+            button=t(code, 'download_button')
         )
 
         status_text = (
@@ -837,16 +874,17 @@ class CallbackHandler:
             )
 
         await query.edit_message_text(
+            f'{t(code, "brand")}\n'
+            '━━━━━━━━━━━━━━━━━━━\n'
             f"🎬 <b>{html.escape(movie['title'])}</b>\n\n"
-            f"💾 File Size: "
-            f"<b>{self.format_size(movie.get('file_size'))}</b>\n\n"
-            "✅ Your download link is ready.\n\n"
-            f"{steps}\n"
-            "⏳ The link message and movie file "
-            "will be removed after 5 minutes.",
+            f"💾 {self.format_size(movie.get('file_size'))}\n\n"
+            f"{t(code, 'link_ready')}\n\n"
+            f"{steps}\n\n"
+            f"{t(code, 'validity')}",
             parse_mode=ParseMode.HTML,
             reply_markup=Keyboards.shortener_button(
-                short_link
+                short_link,
+                code
             ),
             disable_web_page_preview=True
         )

@@ -207,6 +207,14 @@ class Config:
         )
     )
 
+    # The bot deletes every message it sends after AUTO_DELETE_TIME. Admin
+    # chats are kept unless this is true, so a pending-request list does not
+    # vanish before someone presses a button. MyStorage is never deleted.
+    DELETE_ADMIN_MESSAGES = os.getenv(
+        "DELETE_ADMIN_MESSAGES",
+        "false"
+    ).strip().lower() in ("1", "true", "yes", "on")
+
     COOLDOWN_TIME = max(
         0,
         _safe_int(
@@ -362,21 +370,27 @@ Here you can download your favourite movies."""
     ).strip()
 
     HELP_MSG = """
-📖 <b>Cinema Kingdom Help</b>
+🎬 <b>Cinema Kingdom</b>
+━━━━━━━━━━━━━━━━━━━
 
-🎬 <b>Search Movie</b>
-Type the movie name inside the Cinema Kingdom group.
+🔎 <b>Search a movie</b>
+Just type the movie name in the group, the bot answers with the files.
 
-🎥 <b>Request Movie</b>
-Use:
-<code>/request Movie Name</code>
+🎥 <b>Request a movie</b>
+Write it with the details so we find the right file:
+<code>/request Movie Name - Year - Audio Language - Resolution</code>
+Example: <code>/request Don - 2002 - Hindi - 1080p</code>
 
 🔗 <b>Download</b>
-Select a movie, open the bot and press Generate Download Link.
+Press the movie button, then <b>Generate Download Link</b> and the file
+arrives after you clear the short link.
 
-⏱ <b>Automatic Delivery</b>
-After the short link is generated, the movie will arrive automatically after a few seconds.
+🌐 <b>Your language</b>
+<code>/language</code> sets the language the bot answers you in.
 
-⚠️ <b>Expiry</b>
-Download messages and movie files are removed after 5 minutes.
+⏱ <b>Clean chats</b>
+Bot messages disappear by themselves after 5 minutes, so nothing piles up.
+
+⚠️ <b>Please note</b>
+Share only what you download, keep the group free of other links.
 """

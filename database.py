@@ -53,13 +53,23 @@ class Database:
 
         cur.execute('''CREATE TABLE IF NOT EXISTS users(
             user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT,
-            join_date TEXT, last_active TEXT, total_requests INTEGER DEFAULT 0
+            join_date TEXT, last_active TEXT, total_requests INTEGER DEFAULT 0,
+            language TEXT DEFAULT 'en'
         )''')
         cur.execute('''CREATE TABLE IF NOT EXISTS requests(
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, movie_title TEXT,
             description TEXT, status TEXT DEFAULT 'pending', request_date TEXT,
-            completed_date TEXT, notes TEXT
+            completed_date TEXT, notes TEXT,
+            year TEXT DEFAULT '', audio_language TEXT DEFAULT '', resolution TEXT DEFAULT ''
         )''')
+        self._add_missing_columns(cur, {
+            'users': {'language': "TEXT DEFAULT 'en'"},
+            'requests': {
+                'year': "TEXT DEFAULT ''",
+                'audio_language': "TEXT DEFAULT ''",
+                'resolution': "TEXT DEFAULT ''",
+            },
+        })
         cur.execute('''CREATE TABLE IF NOT EXISTS cooldowns(
             user_id INTEGER PRIMARY KEY, last_message TEXT
         )''')
@@ -96,6 +106,16 @@ class Database:
         cur.execute('CREATE INDEX IF NOT EXISTS idx_link_events_movie ON link_events(movie_id)')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_link_events_type ON link_events(event_type)')
         self.conn.commit()
+
+    def _add_missing_columns(self, cur, table_columns: Dict[str, Dict[str, str]]):
+        """Add columns that an older bot.db does not have yet."""
+        for table, columns in table_columns.items():
+            existing = {
+                row[1] for row in cur.execute(f'PRAGMA table_info({table})').fetchall()
+            }
+            for name, sql_type in columns.items():
+                if name not in existing:
+                    cur.execute(f'ALTER TABLE {table} ADD COLUMN {name} {sql_type}')
 
     def seed_admins(self, admin_ids: List[int], super_admin_id: int = 0):
         for admin_id in admin_ids:
@@ -253,16 +273,34 @@ class Database:
         self.conn.execute('UPDATE users SET total_requests=total_requests+1 WHERE user_id=?', (user_id,))
         self.conn.commit()
 
-    def add_request(self, user_id: int, movie_title: str, description: str = '') -> int:
+    def set_user_language(self, user_id: int, code: str):
+        self.conn.execute(
+            'UPDATE users SET language=? WHERE user_id=?', (code, user_id)
+        )
+        self.conn.commit()
+
+    def get_user_language(self, user_id: int) -> str:
+        row = self.conn.execute(
+            'SELECT language FROM users WHERE user_id=?', (user_id,)
+        ).fetchone()
+        return (row['language'] if row and row['language'] else 'en')
+
+    def add_request(self, user_id: int, movie_title: str, description: str = '',
+                    year: str = '', audio_language: str = '', resolution: str = '') -> int:
         cur = self.conn.cursor()
-        cur.execute('INSERT INTO requests(user_id, movie_title, description, request_date) VALUES(?,?,?,?)',
-                    (user_id, movie_title, description, datetime.now().isoformat()))
+        cur.execute('''INSERT INTO requests(
+                user_id, movie_title, description, request_date,
+                year, audio_language, resolution
+            ) VALUES(?,?,?,?,?,?,?)''',
+                    (user_id, movie_title, description, datetime.now().isoformat(),
+                     year, audio_language, resolution))
         self.conn.commit()
         return cur.lastrowid
 
     def get_pending_requests(self) -> List[Dict]:
         rows = self.conn.execute('''
             SELECT r.id, r.user_id, r.movie_title, r.description, r.status, r.request_date,
+                   r.year, r.audio_language, r.resolution,
                    u.username, u.first_name
             FROM requests r LEFT JOIN users u ON r.user_id=u.user_id
             WHERE r.status='pending' ORDER BY r.request_date DESC
@@ -272,6 +310,7 @@ class Database:
     def get_request(self, request_id: int) -> Optional[Dict]:
         row = self.conn.execute('''
             SELECT r.id, r.user_id, r.movie_title, r.status, r.request_date,
+                   r.year, r.audio_language, r.resolution,
                    u.username, u.first_name
             FROM requests r LEFT JOIN users u ON r.user_id=u.user_id
             WHERE r.id=?

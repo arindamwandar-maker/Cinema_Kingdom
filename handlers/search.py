@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 from config import Config
 from database import Database
 from keyboards import Keyboards
+from services.i18n import t
 
 
 def render_search_results(
@@ -15,7 +16,8 @@ def render_search_results(
     page: int,
     page_size: int,
     bot_username: str,
-    heading: str = '🎬 <b>Search Result</b>'
+    heading: str = None,
+    code: str = 'en'
 ):
     """Build one page of search results as (message text, keyboard).
 
@@ -36,20 +38,22 @@ def render_search_results(
     start = (page - 1) * page_size
     page_movies = movies[start:start + page_size]
 
+    heading = heading or t(code, 'search_result')
+
     lines = [
-        f'🔎 <b>Search Query</b> — <code>{html.escape(query_text)}</code>',
+        f'{t(code, "search_query")} — <code>{html.escape(query_text)}</code>',
         '',
-        f'{heading} — <b>{total} files</b>',
+        f'{heading} — {t(code, "search_files", count=total)}',
     ]
 
     if total_pages > 1:
         lines.append(
-            f'📄 <b>Pages</b> — <b>{page}/{total_pages}</b>'
+            f'{t(code, "search_pages")} — <b>{page}/{total_pages}</b>'
         )
 
     lines.extend([
         '',
-        '⬇️ Here is your query result, please select',
+        t(code, 'search_select'),
     ])
 
     keyboard = Keyboards.search_results_keyboard(
@@ -81,6 +85,7 @@ class SearchHandler:
 
         text = message.text.strip()
         self.db.add_or_update_user(user.id, user.username or '', user.first_name or '', user.last_name or '')
+        code = self.db.get_user_language(user.id)
 
         if chat.id == self.config.GROUP_ID and chat.type in ('group', 'supergroup'):
             self.db.add_message(chat.id, message.message_id, seconds=self.config.AUTO_DELETE_TIME)
@@ -88,13 +93,14 @@ class SearchHandler:
         if text == '🎬 Search Movie':
             if chat.type == 'private':
                 sent = await message.reply_text(
-                    f'🔒 <b>Private Search Disabled</b>\n\nSearch movies in the Cinema Kingdom group.',
+                    t(code, 'private_search'),
                     parse_mode=ParseMode.HTML,
-                    reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME),
+                    reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME, code),
                 )
             else:
                 sent = await message.reply_text(
-                    '🎬 <b>Search Movie</b>\n\nType the movie name now.\nExample: <code>Avengers</code>',
+                    f'{t(code, "brand")}\n\n{t(code, "search_hint")}\n'
+                    '🎬 <code>Avengers</code>',
                     parse_mode=ParseMode.HTML,
                 )
             self.db.add_message(sent.chat.id, sent.message_id, seconds=self.config.AUTO_DELETE_TIME)
@@ -102,7 +108,7 @@ class SearchHandler:
 
         if text == '🎥 Request Movie':
             sent = await message.reply_text(
-                '🎥 <b>Request Movie</b>\n\nUse: <code>/request Movie Name</code>',
+                t(code, 'request_hint'),
                 parse_mode=ParseMode.HTML,
             )
             self.db.add_message(sent.chat.id, sent.message_id, seconds=self.config.AUTO_DELETE_TIME)
@@ -110,16 +116,18 @@ class SearchHandler:
 
         if text == '📢 Join Channel':
             sent = await message.reply_text(
-                '📢 Open the official update channel below.',
-                reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME),
+                f'{t(code, "brand")}\n\n{t(code, "join_channel")}',
+                parse_mode=ParseMode.HTML,
+                reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME, code),
             )
             self.db.add_message(sent.chat.id, sent.message_id, seconds=self.config.AUTO_DELETE_TIME)
             return
 
         if text == '👥 Join Group':
             sent = await message.reply_text(
-                '👥 Open the Cinema Kingdom community group below.',
-                reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME),
+                f'{t(code, "brand")}\n\n{t(code, "join_group")}',
+                parse_mode=ParseMode.HTML,
+                reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME, code),
             )
             self.db.add_message(sent.chat.id, sent.message_id, seconds=self.config.AUTO_DELETE_TIME)
             return
@@ -135,9 +143,9 @@ class SearchHandler:
 
         if chat.type == 'private':
             sent = await message.reply_text(
-                '🔒 <b>Private Search Disabled</b>\n\nUse the Cinema Kingdom group to search.',
+                t(code, 'private_search'),
                 parse_mode=ParseMode.HTML,
-                reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME),
+                reply_markup=Keyboards.promo_buttons(self.config.CHANNEL_USERNAME, self.config.GROUP_USERNAME, code),
             )
             self.db.add_message(sent.chat.id, sent.message_id, seconds=self.config.AUTO_DELETE_TIME)
             return
@@ -149,7 +157,7 @@ class SearchHandler:
             if not self.db.check_cooldown(user.id, self.config.COOLDOWN_TIME):
                 remain = self.db.cooldown_remaining(user.id, self.config.COOLDOWN_TIME)
                 warn = await message.reply_text(
-                    f'⏳ <b>Please wait</b>\n\nYou can search again in <b>{remain} seconds</b>.',
+                    f'{t(code, "wait")}\n\n' + t(code, 'wait_line', seconds=remain),
                     parse_mode=ParseMode.HTML,
                     reply_to_message_id=message.message_id,
                 )
@@ -160,22 +168,26 @@ class SearchHandler:
             context.user_data['adult_query'] = text
             context.user_data['adult_chat_id'] = chat.id
             confirm = await message.reply_text(
-                '🔞 <b>Age Confirmation Required</b>\n\nThis search may contain 18+ content. Please confirm that you are 18 years old or above.',
+                f'{t(code, "adult_title")}\n\n{t(code, "adult_line")}',
                 parse_mode=ParseMode.HTML,
-                reply_markup=Keyboards.adult_confirmation(),
+                reply_markup=Keyboards.adult_confirmation(code),
                 reply_to_message_id=message.message_id,
             )
             self.db.add_message(confirm.chat.id, confirm.message_id, seconds=self.config.AUTO_DELETE_TIME)
             return
 
-        await self.send_search_results(message, context, text)
+        await self.send_search_results(message, context, text, code)
 
-    async def send_search_results(self, message, context, text: str):
+    async def send_search_results(self, message, context, text: str, code: str = 'en'):
         movies = self.db.search_movies(text, self.config.MAX_MOVIES_PER_SEARCH)
         if not movies:
             safe = html.escape(text)
             sent = await message.reply_text(
-                f'❌ <b>No movie found</b>\n\n🔎 <b>Search Query</b> — <code>{safe}</code>\n\nRequest it using <code>/request {safe}</code>.',
+                f'{t(code, "brand")}\n'
+                '━━━━━━━━━━━━━━━━━━━\n'
+                f'{t(code, "no_results")}\n\n'
+                f'🔎 {t(code, "search_query")} — <code>{safe}</code>\n\n'
+                + t(code, 'request_it', command=f'/request {safe}'),
                 parse_mode=ParseMode.HTML,
                 reply_to_message_id=message.message_id,
             )
@@ -190,7 +202,8 @@ class SearchHandler:
             movies,
             1,
             self.config.SEARCH_RESULTS_PER_PAGE,
-            username
+            username,
+            code=code
         )
 
         result = await message.reply_text(

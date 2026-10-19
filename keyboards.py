@@ -5,6 +5,8 @@ from telegram import (
     ReplyKeyboardMarkup
 )
 
+from services.i18n import t
+
 
 class Keyboards:
 
@@ -183,12 +185,12 @@ class Keyboards:
             + list(pages.inline_keyboard)
         )
 
-    @staticmethod
-    def movie_button(movie_id: int):
+    @classmethod
+    def movie_button(cls, movie_id: int, code: str = 'en'):
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "🔗 Generate Download Link",
+                    cls.button_label(t(code, 'download_link')),
                     callback_data=(
                         f"download_{movie_id}"
                     )
@@ -196,7 +198,7 @@ class Keyboards:
             ],
             [
                 InlineKeyboardButton(
-                    "ℹ️ Movie Details",
+                    cls.button_label(t(code, 'movie_details')),
                     callback_data=(
                         f"info_{movie_id}"
                     )
@@ -204,23 +206,27 @@ class Keyboards:
             ]
         ])
 
-    @staticmethod
+    @classmethod
     def shortener_button(
-        short_url: str
+        cls,
+        short_url: str,
+        code: str = 'en'
     ):
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "🎬 Click Here To Download Movie",
+                    cls.button_label(t(code, 'download_button')),
                     url=short_url
                 )
             ]
         ])
 
-    @staticmethod
+    @classmethod
     def force_join_menu(
+        cls,
         channel_username: str,
-        group_username: str
+        group_username: str,
+        code: str = 'en'
     ):
         channel = (
             channel_username
@@ -235,7 +241,7 @@ class Keyboards:
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "📢 Join Channel",
+                    cls.button_label(t(code, 'join_channel')),
                     url=(
                         f"https://t.me/{channel}"
                     )
@@ -243,7 +249,7 @@ class Keyboards:
             ],
             [
                 InlineKeyboardButton(
-                    "👥 Join Group",
+                    cls.button_label(t(code, 'join_group')),
                     url=(
                         f"https://t.me/{group}"
                     )
@@ -251,16 +257,18 @@ class Keyboards:
             ],
             [
                 InlineKeyboardButton(
-                    "✅ I've Joined",
+                    cls.button_label(t(code, 'joined_yes')),
                     callback_data="check_join"
                 )
             ]
         ])
 
-    @staticmethod
+    @classmethod
     def promo_buttons(
+        cls,
         channel_username: str,
-        group_username: str
+        group_username: str,
+        code: str = 'en'
     ):
         channel = (
             channel_username
@@ -275,7 +283,7 @@ class Keyboards:
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "👥 Join Group",
+                    cls.button_label(t(code, 'join_group')),
                     url=(
                         f"https://t.me/{group}"
                     )
@@ -283,7 +291,7 @@ class Keyboards:
             ],
             [
                 InlineKeyboardButton(
-                    "📢 Join Channel",
+                    cls.button_label(t(code, 'join_channel')),
                     url=(
                         f"https://t.me/{channel}"
                     )
@@ -307,18 +315,18 @@ class Keyboards:
 
         return InlineKeyboardMarkup(rows)
 
-    @staticmethod
-    def adult_confirmation():
+    @classmethod
+    def adult_confirmation(cls, code: str = 'en'):
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "✅ I am 18 or above",
+                    cls.button_label(t(code, 'adult_yes')),
                     callback_data="adult_yes"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    "❌ I am under 18",
+                    cls.button_label(t(code, 'adult_no')),
                     callback_data="adult_no"
                 )
             ]

@@ -275,7 +275,9 @@ LINK TRACKING
 
 MOVIE REQUEST REMINDERS
 - Every REQUEST_REMINDER_INTERVAL seconds (default 3600 = 1 hour) the bot
-  private-messages every bot admin the list of pending movie requests.
+  private-messages every bot admin the list of pending movie requests. That is
+  ADMIN_IDS, SUPER_ADMIN_ID and everyone added with /addadmin - before, an
+  /addadmin admin never got the list and so could never press Solved.
 - Each request has a ✅ Solved button. Pressing it marks the request solved in
   the bot, writes Status / Solved By / Solved Time on that row of the Movie
   Requests worksheet, updates the list in that message and tells the user who
@@ -307,3 +309,66 @@ UPLOADER NAMES AND FILE CAPTION
   blank drops only that line. No admin username is printed there; SUPER_ADMIN_
   USERNAME is only used in the group welcome message.
 - MyStorage is never linked in these messages, it stays private.
+
+PENDING REQUESTS ON DEMAND (/pending)
+- /pending (or /requests) sends the same solvable list the hourly reminder
+  sends, straight away. /pending is in the admin menu and works in the group
+  and in a private chat.
+- In a group it answers as a private message to the admin who typed it, so no
+  member sees admin tooling. If that admin has never opened /start the list
+  falls back to a group reply, because Telegram blocks the private message.
+- Any bot admin can press ✅ Solved, including people added with /addadmin.
+
+EVERY BOT MESSAGE DELETES ITSELF
+- AutoDeleteBot (services/auto_delete.py) is the bot object the whole app uses.
+  Every Telegram message the bot sends is booked for deletion after
+  AUTO_DELETE_TIME seconds (default 300 = 5 minutes), in the group and in
+  private chats, without each handler having to remember.
+- Two exemptions, both on purpose:
+  * MyStorage (STORAGE_CHANNEL) - those posts hold the original files, so
+    deleting them would empty the catalogue.
+  * Admin chats - the pending request list would vanish before a Solved button
+    can be pressed. DELETE_ADMIN_MESSAGES=true removes this exemption.
+- A handler that books a shorter timer (for example the 60-second group timer
+  notice) still wins, because its own add_message call runs after the send.
+
+MEMBER COUNTS, PRIVATELY (/members)
+- /members (or /membercounts) reports the member count of the group, the
+  community channel and MyStorage.
+- It is always delivered to the admin who asked: a private message, or a reply
+  in the group only if that admin has never opened /start.
+- A chat the bot cannot read shows "not visible"; the bot must be a member, and
+  an admin, of that chat.
+
+MOVIE REQUEST FORMAT (/request)
+- Users write: /request Movie Name - Year - Audio Language - Resolution
+  Example: /request Don - 2002 - Hindi - 1080p
+  The plain form /request Don 2002 Hindi 1080p works too.
+- Year is a 1900-2099 number, quality is 480p/720p/1080p/2160p/4K/8K/HD/SD,
+  audio is a known language name (Hindi, English, Tamil, Telugu, Dual Audio,
+  Dubbed, ...). Anything left over is the movie name, so a multi-word title is
+  safe.
+- Year, audio and quality are stored in their own columns of bot.db and shown
+  on the confirmation, the admin notice, the hourly pending list and the Movie
+  Requests worksheet (which gets the full "Don (2002) - Hindi - 1080p" line).
+
+USER LANGUAGES (/language)
+- /language or the inline menu lets each user pick their own language; it is
+  saved per user in bot.db and used for everything that user then sees: search
+  results, the download button, Movie Details, the delivered file caption, the
+  request confirmation, the 18+ confirmation, the private-search notice, the
+  group timer and rule notices.
+- The first page holds English, Hindi, Bangla, Tamil, Telugu, Marathi, Gujarati
+  and Punjabi with full translations. "🌐 More languages" pages through 34
+  languages in their own script.
+- A language without a translation yet shows English, never a blank message:
+  every string lives in services/i18n.py, and adding a language is one dict
+  there.
+- The four reply-keyboard buttons (🎬 Search Movie, 🎥 Request Movie,
+  📢 Join Channel, 👥 Join Group) and /help stay English, because the bot
+  matches on that exact button text; their answers are translated.
+
+MESSAGE LOOKS
+- User-facing messages share one shape: the brand line, a ━━━ divider, then
+  emoji-labelled lines. Google Sheet status is no longer printed in front of
+  users - a sheet that refused a row is logged instead.

@@ -16,26 +16,39 @@ MAX_REQUESTS_PER_REMINDER = 25
 def render_request_reminder(requests):
     """Pending request list as (message text, keyboard).
 
-    The reminder job sends it and the solve button edits the same message, so
-    both have to build it the same way.
+    The reminder job sends it, /pending sends the same thing on demand and the
+    solve button edits that message, so all three build it here.
     """
     listed = requests[:MAX_REQUESTS_PER_REMINDER]
 
     lines = [
-        '🎬 <b>Pending Movie Requests</b>',
+        '🎬 <b>Cinema Kingdom</b>',
+        '━━━━━━━━━━━━━━━━━━━',
+        f'📝 <b>Pending Movie Requests</b> — <b>{len(requests)}</b>',
         '',
-        'Press a button once the movie is uploaded.',
+        'Press ✅ Solved once the movie is uploaded.',
         '',
     ]
 
     for index, request in enumerate(listed, start=1):
         username = request.get('username') or ''
         requester = f'@{username}' if username else (request.get('first_name') or 'Unknown')
-        lines.append(
-            f"{index}. <b>{html.escape(request['movie_title'])}</b>"
-            f' — requested by {html.escape(requester)}'
-            f' (ID <code>{request["id"]}</code>)'
+
+        title = request['movie_title']
+        if request.get('year'):
+            title = f"{title} ({request['year']})"
+
+        extras = ' · '.join(
+            part for part in (request.get('audio_language'), request.get('resolution')) if part
         )
+
+        lines.append(f"{index}. <b>{html.escape(title)}</b>")
+        if extras:
+            lines.append(f"   🔊 {html.escape(extras)}")
+        lines.append(
+            f"   👤 {html.escape(requester)} · 📝 <code>#{request['id']}</code>"
+        )
+        lines.append('')
 
     if len(requests) > len(listed):
         lines.append(f'… and {len(requests) - len(listed)} more.')
@@ -66,6 +79,32 @@ class CommunityService:
         except ValueError:
             return str(value)
 
+    def recipient_ids(self):
+        """Every bot admin: /addadmin people count as much as ADMIN_IDS."""
+        return sorted(
+            set(self.config.ADMIN_IDS)
+            | {self.config.SUPER_ADMIN_ID}
+            | set(self.db.get_admin_ids())
+        )
+
+    async def send_pending_list(self, bot, chat_id: int) -> int:
+        """Send the pending requests with their Solved buttons. Returns the count."""
+        requests = self.db.get_pending_requests()
+        text, keyboard = render_request_reminder(requests) if requests else (
+            '🎬 <b>Cinema Kingdom</b>\n'
+            '━━━━━━━━━━━━━━━━━━━\n'
+            '✅ <b>No pending movie requests</b>\n\n'
+            'Nobody is waiting for a movie right now.',
+            None,
+        )
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard,
+        )
+        return len(requests)
+
     async def send_request_reminders(self, context):
         requests = self.db.get_pending_requests()
         if not requests:
@@ -73,7 +112,7 @@ class CommunityService:
 
         text, keyboard = render_request_reminder(requests)
 
-        for admin_id in self.config.ADMIN_IDS:
+        for admin_id in self.recipient_ids():
             try:
                 await context.bot.send_message(
                     chat_id=admin_id,
